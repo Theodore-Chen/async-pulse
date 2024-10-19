@@ -1,5 +1,4 @@
 #include <gtest/gtest.h>
-#include <future>
 #include "thread_pool.h"
 
 struct UtTestData {
