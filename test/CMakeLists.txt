@@ -7,6 +7,7 @@ set(LOCAL_SRC_FILES
 set(LOCAL_TEST_FILES
     ${ROOT_DIR}/test/main.cpp
     ${ROOT_DIR}/test/thread_pool_bind_ut.cpp
+    ${ROOT_DIR}/test/thread_pool_ut.cpp
 )
 
 set(LOCAL_INC_DIRS

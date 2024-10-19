@@ -21,7 +21,7 @@ TEST(ThreadPoolBindUt, CreateMax) {
 }
 
 TEST(ThreadPoolBindUt, CreateExceedMax) {
-    ThreadPool threadPool(1000);
+    ThreadPool threadPool(ThreadPool::THREAD_NUM_MAX + 1);
     EXPECT_EQ(threadPool.GetThreadNum(), threadPool.THREAD_NUM_MAX);
 }
 

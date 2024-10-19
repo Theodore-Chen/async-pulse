@@ -33,3 +33,6 @@
 
 # Compile Output
 build/
+
+# Project files
+.vscode/
