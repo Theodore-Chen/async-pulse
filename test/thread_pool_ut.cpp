@@ -101,7 +101,7 @@ TEST(ThreadPoolUt, SubmitByMultiThread) {
 
 TEST(ThreadPoolUt, SubmitByMultiThreadHeavy) {
     auto task = [](ThreadPool<UtTestData>& tp, uint32_t id) {
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 500; i++) {
             uint32_t inPut = id * 10000 + i;
             std::future<UtTestData> handle = tp.Submit({inPut, 0});
             UtTestData data = handle.get();

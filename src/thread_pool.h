@@ -9,18 +9,20 @@
 #include <thread>
 #include <vector>
 
+#include "queue/lock_queue.h"
+
 void ThreadPoolTest();
 
 template <typename Data>
 class ThreadPool {
    public:
     using PrmsData = std::pair<Data, std::promise<Data>>;
-    using CallBackFunc = std::function<void(Data&)>;
+    using CallBack = std::function<void(Data&)>;
     static const size_t THREAD_NUM_DEFAULT = 4;
     static const size_t THREAD_NUM_MAX = 10;
 
    public:
-    ThreadPool(size_t thread_num, CallBackFunc callback);
+    ThreadPool(size_t threadNum, CallBack callback);
     ~ThreadPool();
     ThreadPool(const ThreadPool&) = delete;
     ThreadPool& operator=(const ThreadPool&) = delete;
@@ -38,17 +40,16 @@ class ThreadPool {
     static void ThreadTask(ThreadPool* tp);
 
    private:
-    CallBackFunc calcCallback_{nullptr};
+    CallBack callback_{nullptr};
     std::vector<std::thread> threads_;
     std::atomic<bool> ready_{false};
-    std::mutex queLock_;
-    std::queue<PrmsData> queData_;
+    LockQueue<PrmsData> queue_;
 };
 
 template <typename Data>
-inline ThreadPool<Data>::ThreadPool(size_t thread_num, CallBackFunc callback) : calcCallback_(callback) {
-    if (calcCallback_) {
-        size_t num = thread_num > THREAD_NUM_MAX ? THREAD_NUM_MAX : thread_num;
+inline ThreadPool<Data>::ThreadPool(size_t threadNum, CallBack callback) : callback_(callback) {
+    if (callback_) {
+        size_t num = threadNum > THREAD_NUM_MAX ? THREAD_NUM_MAX : threadNum;
         ready_.store(num == 0 ? false : true);
         for (uint32_t i = 0; i < num; i++) {
             threads_.emplace_back(ThreadTask, this);
@@ -63,31 +64,21 @@ ThreadPool<Data>::~ThreadPool() {
 
 template <typename Data>
 inline std::future<Data> ThreadPool<Data>::Submit(Data&& data) {
-    if (!calcCallback_) {
+    if (!callback_) {
         return std::future<Data>();
     }
     PrmsData prmsData(std::forward<Data>(data), std::promise<Data>());
     std::future<Data> result = prmsData.second.get_future();
-    std::lock_guard<std::mutex> ql(queLock_);
-    queData_.push(std::move(prmsData));
+    queue_.Enqueue(std::move(prmsData));
     return result;
 }
 
 template <typename Data>
 void ThreadPool<Data>::ThreadTask(ThreadPool* tp) {
-    auto next = [tp](PrmsData& data) -> bool {
-        std::lock_guard<std::mutex> ql(tp->queLock_);
-        if (!tp->queData_.empty()) {
-            data = std::move(tp->queData_.front());
-            tp->queData_.pop();
-            return true;
-        }
-        return false;
-    };
     while (tp->ready_.load()) {
         PrmsData data;
-        if (next(data)) {
-            tp->calcCallback_(data.first);
+        if (tp->queue_.Dequeue(data)) {
+            tp->callback_(data.first);
             data.second.set_value(std::move(data.first));
         }
     }
