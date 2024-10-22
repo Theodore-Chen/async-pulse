@@ -1,7 +1,5 @@
 #include <gtest/gtest.h>
-
 #include <functional>
-#include <chrono>
 
 #include "fsm/fsm.h"
 
@@ -65,7 +63,11 @@ StateTable<PlayerState, PlayerEvent> g_playerStateTable{
 
 StateChangeTable<PlayerState, PlayerEvent> g_playerStateChangeTable{
     {PlayerState::RAW, {{PlayerEvent::INIT, PlayerState::INIT}}},
-    {PlayerState::INIT, {{PlayerEvent::DESTROY, PlayerState::RAW}, {PlayerEvent::PLAY, PlayerState::PLAY}}},
+    {PlayerState::INIT,
+     {{PlayerEvent::DESTROY, PlayerState::RAW},
+      {PlayerEvent::PLAY, PlayerState::PLAY},
+      {PlayerEvent::PAUSE, PlayerState::PAUSE},
+      {PlayerEvent::STOP, PlayerState::STOP}}},
     {PlayerState::PLAY,
      {{PlayerEvent::DESTROY, PlayerState::RAW},
       {PlayerEvent::PAUSE, PlayerState::PAUSE},
@@ -82,7 +84,60 @@ StateChangeTable<PlayerState, PlayerEvent> g_playerStateChangeTable{
 
 TEST(FsmUt, Create) {
     FSM<PlayerState, PlayerEvent> player(&g_playerStateTable, &g_playerStateChangeTable, PlayerState::RAW);
-    player.Submit(PlayerEvent::INIT);
-    std::this_thread::sleep_for(10ms);
+    EXPECT_EQ(player.GetState(), PlayerState::RAW);
+}
+
+TEST(FsmUt, Init) {
+    FSM<PlayerState, PlayerEvent> player(&g_playerStateTable, &g_playerStateChangeTable, PlayerState::RAW);
+    std::future<void> handle = player.Submit(PlayerEvent::INIT);
+    handle.wait();
     EXPECT_EQ(player.GetState(), PlayerState::INIT);
+}
+
+TEST(FsmUt, Destroy) {
+    FSM<PlayerState, PlayerEvent> player(&g_playerStateTable, &g_playerStateChangeTable, PlayerState::RAW);
+    std::future<void> handle;
+    handle = player.Submit(PlayerEvent::INIT);
+    handle = player.Submit(PlayerEvent::DESTROY);
+    handle.wait();
+    EXPECT_EQ(player.GetState(), PlayerState::RAW);
+}
+
+TEST(FsmUt, RunPlay) {
+    FSM<PlayerState, PlayerEvent> player(&g_playerStateTable, &g_playerStateChangeTable, PlayerState::RAW);
+    std::future<void> handle;
+    handle = player.Submit(PlayerEvent::INIT);
+    handle = player.Submit(PlayerEvent::PLAY);
+    handle.wait();
+    EXPECT_EQ(player.GetState(), PlayerState::PLAY);
+}
+
+TEST(FsmUt, RunPause) {
+    FSM<PlayerState, PlayerEvent> player(&g_playerStateTable, &g_playerStateChangeTable, PlayerState::RAW);
+    std::future<void> handle;
+    handle = player.Submit(PlayerEvent::INIT);
+    handle = player.Submit(PlayerEvent::PLAY);
+    handle = player.Submit(PlayerEvent::PAUSE);
+    handle.wait();
+    EXPECT_EQ(player.GetState(), PlayerState::PAUSE);
+}
+
+TEST(FsmUt, RunStop) {
+    FSM<PlayerState, PlayerEvent> player(&g_playerStateTable, &g_playerStateChangeTable, PlayerState::RAW);
+    std::future<void> handle;
+    handle = player.Submit(PlayerEvent::INIT);
+    handle = player.Submit(PlayerEvent::PLAY);
+    handle = player.Submit(PlayerEvent::STOP);
+    handle.wait();
+    EXPECT_EQ(player.GetState(), PlayerState::STOP);
+}
+
+TEST(FsmUt, RunStopToPlay) {
+    FSM<PlayerState, PlayerEvent> player(&g_playerStateTable, &g_playerStateChangeTable, PlayerState::RAW);
+    std::future<void> handle;
+    handle = player.Submit(PlayerEvent::INIT);
+    handle = player.Submit(PlayerEvent::STOP);
+    handle = player.Submit(PlayerEvent::PLAY);
+    handle.wait();
+    EXPECT_EQ(player.GetState(), PlayerState::PLAY);
 }

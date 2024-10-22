@@ -27,33 +27,44 @@ class FSM {
     FSM(FSM&&) = delete;
     FSM& operator=(FSM&&) = delete;
 
-    void Submit(Event event) { queue_.Enqueue(event); }
+    std::future<void> Submit(Event event) {
+        Handle handle(event, std::promise<void>());
+        std::future<void> fut = handle.second.get_future();
+        queue_.Enqueue(std::move(handle));
+        return fut;
+    }
     State GetState() { return curState_; }
 
    private:
     static void Process(FSM* fsm) {
-        Event event;
         while (fsm->ready_.load() == true) {
-            if (fsm->pause_.load() == false && fsm->queue_.Dequeue(event)) {
-                fsm->stateTable_.Callback(fsm->curState_, event);
-
-                State toState;
-                if (fsm->changeTable_.GetTostate(fsm->curState_, event, toState)) {
-                    fsm->stateTable_.Exit(fsm->curState_, event);
-                    fsm->stateTable_.Entry(toState, event);
-                    fsm->stateTable_.Callback(toState, event);
-                    fsm->curState_ = toState;
-                }
+            Handle handle;
+            if (fsm->pause_.load() == false && fsm->queue_.Dequeue(handle)) {
+                fsm->stateTable_.Callback(fsm->curState_, handle.first);
+                ChangeState(fsm, handle.first);
+                handle.second.set_value();
             }
         }
     }
+    static void ChangeState(FSM* fsm, Event event) {
+        State toState;
+        if (fsm->changeTable_.GetTostate(fsm->curState_, event, toState)) {
+            fsm->stateTable_.Exit(fsm->curState_, event);
+            fsm->stateTable_.Entry(toState, event);
+            fsm->stateTable_.Callback(toState, event);
+            fsm->curState_ = toState;
+        }
+    }
+
+   private:
+    using Handle = std::pair<Event, std::promise<void>>;
 
    private:
     State curState_;
     FsmStateTable<State, Event> stateTable_;
     FsmStateChangeTable<State, Event> changeTable_;
     std::future<void> pooling_;
-    LockQueue<Event> queue_;
+    LockQueue<Handle> queue_;
     std::atomic<bool> pause_{true};
     std::atomic<bool> ready_{false};
 };
