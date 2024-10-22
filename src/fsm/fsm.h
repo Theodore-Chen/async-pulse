@@ -10,7 +10,10 @@
 #include "fsm/state_table.h"
 #include "queue/lock_queue.h"
 
-template <typename State, typename Event>
+template <typename State,
+          typename Event,
+          typename std::enable_if<std::is_enum<State>::value, bool>::type = true,
+          typename std::enable_if<std::is_enum<Event>::value, bool>::type = true>
 class FSM {
    public:
     FSM(StateTable<State, Event>* stateTable, StateChangeTable<State, Event>* changeTable, State initial)

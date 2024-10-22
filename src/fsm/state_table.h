@@ -18,7 +18,10 @@ struct FsmState {
 template <typename State, typename Event>
 using StateTable = std::map<State, FsmState<State, Event>>;
 
-template <typename State, typename Event>
+template <typename State,
+          typename Event,
+          typename std::enable_if<std::is_enum<State>::value, bool>::type = true,
+          typename std::enable_if<std::is_enum<Event>::value, bool>::type = true>
 class FsmStateTable {
    public:
     FsmStateTable() {}
@@ -56,7 +59,10 @@ class FsmStateTable {
 template <typename State, typename Event>
 using StateChangeTable = std::map<State, std::map<Event, State>>;
 
-template <typename State, typename Event>
+template <typename State,
+          typename Event,
+          typename std::enable_if<std::is_enum<State>::value, bool>::type = true,
+          typename std::enable_if<std::is_enum<Event>::value, bool>::type = true>
 class FsmStateChangeTable {
    public:
     FsmStateChangeTable() {}
