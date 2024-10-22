@@ -1,8 +1,11 @@
 #include <gtest/gtest.h>
+
 #include <functional>
-#include <iostream>
+#include <chrono>
 
 #include "fsm/fsm.h"
+
+using namespace std::chrono_literals;
 
 enum class PlayerState : uint32_t {
     RAW,
@@ -23,11 +26,41 @@ enum class PlayerEvent : uint32_t {
 Action<PlayerEvent> doNothing = [](PlayerEvent event) -> void {};
 
 StateTable<PlayerState, PlayerEvent> g_playerStateTable{
-    {PlayerState::RAW, {PlayerState::RAW, doNothing, doNothing, doNothing}},
-    {PlayerState::INIT, {PlayerState::INIT, doNothing, doNothing, doNothing}},
-    {PlayerState::PLAY, {PlayerState::PLAY, doNothing, doNothing, doNothing}},
-    {PlayerState::PAUSE, {PlayerState::PAUSE, doNothing, doNothing, doNothing}},
-    {PlayerState::STOP, {PlayerState::STOP, doNothing, doNothing, doNothing}},
+    {PlayerState::RAW,
+     {
+         .state_ = PlayerState::RAW,
+         .entry_ = doNothing,
+         .exit_ = doNothing,
+         .callback_ = doNothing,
+     }},
+    {PlayerState::INIT,
+     {
+         .state_ = PlayerState::INIT,
+         .entry_ = doNothing,
+         .exit_ = doNothing,
+         .callback_ = doNothing,
+     }},
+    {PlayerState::PLAY,
+     {
+         .state_ = PlayerState::PLAY,
+         .entry_ = doNothing,
+         .exit_ = doNothing,
+         .callback_ = doNothing,
+     }},
+    {PlayerState::PAUSE,
+     {
+         .state_ = PlayerState::PAUSE,
+         .entry_ = doNothing,
+         .exit_ = doNothing,
+         .callback_ = doNothing,
+     }},
+    {PlayerState::STOP,
+     {
+         .state_ = PlayerState::STOP,
+         .entry_ = doNothing,
+         .exit_ = doNothing,
+         .callback_ = doNothing,
+     }},
 };
 
 StateChangeTable<PlayerState, PlayerEvent> g_playerStateChangeTable{
