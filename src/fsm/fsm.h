@@ -24,10 +24,13 @@ class FSM {
         pause_.store(false);
         pooling_ = std::async(std::launch::async, Process, this);
     }
-    ~FSM() { ready_.store(false); }
+    ~FSM() {
+        ready_.store(false);
+        pooling_.wait();
+    }
     FSM(const FSM&) = delete;
-    FSM& operator=(const FSM&) = delete;
     FSM(FSM&&) = delete;
+    FSM& operator=(const FSM&) = delete;
     FSM& operator=(FSM&&) = delete;
 
     std::future<void> Submit(Event event) {

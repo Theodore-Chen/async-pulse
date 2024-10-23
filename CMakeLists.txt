@@ -1,10 +1,6 @@
-cmake_minimum_required(VERSION 3.8.0)
+cmake_minimum_required(VERSION 3.20.0)
 
 project(ThreadPool VERSION 1.0 LANGUAGES C CXX)
-
-set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
