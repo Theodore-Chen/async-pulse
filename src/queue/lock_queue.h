@@ -23,14 +23,10 @@ class LockQueue {
         return queue_.size();
     }
 
-    void Enqueue(T& t) {
+    template <typename Arg>
+    void Enqueue(Arg&& t) {
         std::lock_guard<std::mutex> lock(mtx_);
-        queue_.push(t);
-    }
-
-    void Enqueue(T&& t) {
-        std::lock_guard<std::mutex> lock(mtx_);
-        queue_.push(std::move(t));
+        queue_.push(std::forward<Arg>(t));
     }
 
     bool Dequeue(T& t) {

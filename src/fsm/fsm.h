@@ -44,6 +44,9 @@ class FSM {
                      StateChangeTable<State, Event>* changeTable)
             : fsm_(fsm), stateTable_(stateTable), changeTable_(changeTable) {}
         void operator()() {
+            if (!fsm_) {
+                return;
+            }
             Handle handle;
             while (fsm_->ready_.load() == true) {
                 if (fsm_->pause_.load() == false && fsm_->queue_.Dequeue(handle)) {
