@@ -10,19 +10,14 @@
 #include "fsm/state_table.h"
 #include "queue/lock_queue.h"
 
-template <typename State,
-          typename Event,
-          typename std::enable_if<std::is_enum<State>::value, bool>::type = true,
-          typename std::enable_if<std::is_enum<Event>::value, bool>::type = true>
+template <typename State, typename Event>
 class FSM {
    public:
-    FSM(StateTable<State, Event>* stateTable, StateChangeTable<State, Event>* changeTable, State initial)
-        : stateTable_(FsmStateTable<State, Event>(stateTable)),
-          changeTable_(FsmStateChangeTable<State, Event>(changeTable)),
-          curState_(initial) {
+    FSM(StateTable<State, Event>* stateTable, StateChangeTable<State, Event>* changeTable, State initial) {
+        curState_.store(initial);
         ready_.store(true);
         pause_.store(false);
-        pooling_ = std::async(std::launch::async, Process, this);
+        pooling_ = std::async(std::launch::async, FSMProcessor(this, stateTable, changeTable));
     }
     ~FSM() {
         ready_.store(false);
@@ -42,35 +37,47 @@ class FSM {
     State GetState() { return curState_; }
 
    private:
-    static void Process(FSM* fsm) {
-        while (fsm->ready_.load() == true) {
+    class FSMProcessor {
+       public:
+        FSMProcessor(FSM<State, Event>* fsm,
+                     StateTable<State, Event>* stateTable,
+                     StateChangeTable<State, Event>* changeTable)
+            : fsm_(fsm), stateTable_(stateTable), changeTable_(changeTable) {}
+        void operator()() {
             Handle handle;
-            if (fsm->pause_.load() == false && fsm->queue_.Dequeue(handle)) {
-                fsm->stateTable_.Callback(fsm->curState_, handle.first);
-                ChangeState(fsm, handle.first);
-                handle.second.set_value();
+            while (fsm_->ready_.load() == true) {
+                if (fsm_->pause_.load() == false && fsm_->queue_.Dequeue(handle)) {
+                    stateTable_.Callback(fsm_->curState_, handle.first);
+                    ChangeState(handle.first);
+                    handle.second.set_value();
+                }
             }
         }
-    }
-    static void ChangeState(FSM* fsm, Event event) {
-        State toState;
-        if (fsm->changeTable_.GetTostate(fsm->curState_, event, toState)) {
-            fsm->stateTable_.Exit(fsm->curState_, event);
-            fsm->stateTable_.Entry(toState, event);
-            fsm->stateTable_.Callback(toState, event);
-            fsm->curState_ = toState;
-        }
-    }
+
+       private:
+        void ChangeState(Event event) {
+            State toState;
+            if (changeTable_.GetTostate(fsm_->curState_, event, toState)) {
+                stateTable_.Exit(fsm_->curState_, event);
+                stateTable_.Entry(toState, event);
+                stateTable_.Callback(toState, event);
+                fsm_->curState_ = toState;
+            }
+        };
+
+       private:
+        FSM<State, Event>* fsm_{nullptr};
+        FsmStateTable<State, Event> stateTable_;
+        FsmStateChangeTable<State, Event> changeTable_;
+    };
 
    private:
     using Handle = std::pair<Event, std::promise<void>>;
 
    private:
-    State curState_;
-    FsmStateTable<State, Event> stateTable_;
-    FsmStateChangeTable<State, Event> changeTable_;
     std::future<void> pooling_;
     LockQueue<Handle> queue_;
+    std::atomic<State> curState_;
     std::atomic<bool> pause_{true};
     std::atomic<bool> ready_{false};
 };

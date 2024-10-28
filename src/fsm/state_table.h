@@ -24,8 +24,7 @@ template <typename State,
           typename std::enable_if<std::is_enum<Event>::value, bool>::type = true>
 class FsmStateTable {
    public:
-    FsmStateTable() {}
-    explicit FsmStateTable(StateTable<State, Event>* table) : table_(table) {}
+    explicit FsmStateTable(StateTable<State, Event>* table = nullptr) : table_(table) {}
     void Entry(State state, Event event) {
         if (Valid(state)) {
             table_->find(state)->second.entry_(event);
@@ -65,8 +64,7 @@ template <typename State,
           typename std::enable_if<std::is_enum<Event>::value, bool>::type = true>
 class FsmStateChangeTable {
    public:
-    FsmStateChangeTable() {}
-    explicit FsmStateChangeTable(StateChangeTable<State, Event>* table) : table_(table) {}
+    explicit FsmStateChangeTable(StateChangeTable<State, Event>* table = nullptr) : table_(table) {}
     bool Valid(State state, Event event) {
         if (table_ && table_->find(state) != table_->end()) {
             const std::map<Event, State>& eventTable = (*table_)[state];
