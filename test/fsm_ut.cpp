@@ -26,35 +26,30 @@ Action<PlayerEvent> doNothing = [](PlayerEvent event) -> void {};
 StateTable<PlayerState, PlayerEvent> g_playerStateTable{
     {PlayerState::RAW,
      {
-         .state_ = PlayerState::RAW,
          .entry_ = doNothing,
          .exit_ = doNothing,
          .callback_ = doNothing,
      }},
     {PlayerState::INIT,
      {
-         .state_ = PlayerState::INIT,
          .entry_ = doNothing,
          .exit_ = doNothing,
          .callback_ = doNothing,
      }},
     {PlayerState::PLAY,
      {
-         .state_ = PlayerState::PLAY,
          .entry_ = doNothing,
          .exit_ = doNothing,
          .callback_ = doNothing,
      }},
     {PlayerState::PAUSE,
      {
-         .state_ = PlayerState::PAUSE,
          .entry_ = doNothing,
          .exit_ = doNothing,
          .callback_ = doNothing,
      }},
     {PlayerState::STOP,
      {
-         .state_ = PlayerState::STOP,
          .entry_ = doNothing,
          .exit_ = doNothing,
          .callback_ = doNothing,

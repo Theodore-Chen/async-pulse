@@ -7,7 +7,6 @@ using Action = std::function<void(Event event)>;
 
 template <typename State, typename Event>
 struct FsmState {
-    State state_;
     Action<Event> entry_{nullptr};
     Action<Event> exit_{nullptr};
     Action<Event> callback_{nullptr};

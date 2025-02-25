@@ -62,7 +62,7 @@ TEST(ThreadPoolUt, SubmitTasks) {
     for (uint32_t i = 0; i < 1000; i++) {
         handles.emplace_back(threadPool.Submit({i, 0}));
     }
-    for (uint32_t i = 0; i < 1000; i++) {
+    for (size_t i = 0; i < 1000; i++) {
         UtTestData data = handles[i].get();
         EXPECT_EQ(data.in, i);
         EXPECT_EQ(data.out, i * 2);
@@ -84,7 +84,7 @@ TEST(ThreadPoolUt, SubmitHeavyTasks) {
 
 TEST(ThreadPoolUt, SubmitByMultiThread) {
     auto task = [](ThreadPool<UtTestData>& tp, uint32_t id) {
-        for (int i = 0; i < 1000; i++) {
+        for (uint32_t i = 0; i < 1000; i++) {
             uint32_t inPut = id * 10000 + i;
             std::future<UtTestData> handle = tp.Submit({inPut, 0});
             UtTestData data = handle.get();
@@ -101,7 +101,7 @@ TEST(ThreadPoolUt, SubmitByMultiThread) {
 
 TEST(ThreadPoolUt, SubmitByMultiThreadHeavy) {
     auto task = [](ThreadPool<UtTestData>& tp, uint32_t id) {
-        for (int i = 0; i < 500; i++) {
+        for (uint32_t i = 0; i < 500; i++) {
             uint32_t inPut = id * 10000 + i;
             std::future<UtTestData> handle = tp.Submit({inPut, 0});
             UtTestData data = handle.get();
