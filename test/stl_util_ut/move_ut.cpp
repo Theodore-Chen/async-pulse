@@ -2,7 +2,7 @@
 
 class Base {
    public:
-    explicit Base(int num = 0) noexcept : num_(num) {}
+    explicit Base(uint32_t num = 0) noexcept : num_(num) {}
     Base(const Base& other) {
         num_ = other.num_;
         isCopyCstr_ = true;

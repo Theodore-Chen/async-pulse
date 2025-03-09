@@ -9,12 +9,15 @@ set(STL_UTIL_UT_DIR ${ROOT_DIR}/test/stl_util_ut)
 set(LOCAL_TEST_FILES
     ${STL_UTIL_UT_DIR}/main.cpp
     ${STL_UTIL_UT_DIR}/move_ut.cpp
+    ${STL_UTIL_UT_DIR}/crtp_ut.cpp
+    ${STL_UTIL_UT_DIR}/crtp_chainanle_ut.cpp
+    ${STL_UTIL_UT_DIR}/shared_ptr_ut.cpp
 )
 
 add_executable(stl_util_ut ${LOCAL_TEST_FILES})
 
-target_link_libraries(stl_util_ut gtest gcov)
+target_link_libraries(stl_util_ut gtest gmock gcov)
 
-target_compile_options(stl_util_ut PRIVATE -g -std=c++11 -pthread -O3 -fPIC)
+target_compile_options(stl_util_ut PRIVATE -g -std=c++11 -pthread -O1 -fPIC)
 
 add_test(NAME stl_util_ut COMMAND stl_util_ut)
