@@ -37,14 +37,14 @@ class Counter {
    public:
     Counter() { ++count; }
     ~Counter() { --count; }
-    static int GetCount() { return count; }
+    static uint32_t GetCount() { return count; }
 
    private:
-    static int count;
+    static uint32_t count;
 };
 
 template <typename Obj>
-int Counter<Obj>::count = 0;
+uint32_t Counter<Obj>::count = 0;
 
 class ObjLeft : public Counter<ObjLeft> {};
 class ObjRight : public Counter<ObjRight> {};

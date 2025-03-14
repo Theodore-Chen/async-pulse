@@ -49,7 +49,9 @@ TEST(SharedPtrUt, Size) {
     std::shared_ptr<Base> base = std::make_shared<Base>(uint32_t(5));
     EXPECT_TRUE(static_cast<bool>(base));
     EXPECT_EQ(sizeof(base), sizeof(nullptr) * 2);
+}
 
+TEST(SharedPtrUt, SizeWithDeleter) {
     std::shared_ptr<Base> baseDel(new Base(uint32_t(10)), [](Base* b) {
         if (b != nullptr) {
             b->Destory();
@@ -58,4 +60,19 @@ TEST(SharedPtrUt, Size) {
     });
     EXPECT_TRUE(static_cast<bool>(baseDel));
     EXPECT_EQ(sizeof(baseDel), sizeof(void*) * 2);
+}
+
+TEST(SharedPtrUt, UseCount) {
+    std::shared_ptr<Base> base = std::make_shared<Base>(uint32_t(5));
+    EXPECT_EQ(base.use_count(), 1);
+    
+    std::shared_ptr<Base> base2 = base;
+    EXPECT_EQ(base.use_count(), 2);
+    EXPECT_EQ(base2.use_count(), 2);
+
+    base2.reset();
+    EXPECT_EQ(base.use_count(), 1);
+
+    base.reset();
+    EXPECT_EQ(base.use_count(), 0);
 }
