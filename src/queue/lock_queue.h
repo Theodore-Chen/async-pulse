@@ -10,8 +10,8 @@ class LockQueue {
     ~LockQueue() {}
     LockQueue(const LockQueue&) = delete;
     LockQueue& operator=(const LockQueue&) = delete;
-    LockQueue(LockQueue&&) = default;
-    LockQueue& operator=(LockQueue&&) = default;
+    LockQueue(LockQueue&&) = delete;
+    LockQueue& operator=(LockQueue&&) = delete;
 
     bool Empty() {
         std::lock_guard<std::mutex> lock(mtx_);

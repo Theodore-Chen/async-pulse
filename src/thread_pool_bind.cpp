@@ -4,7 +4,7 @@
 const size_t ThreadPool::THREAD_NUM_DEFAULT = 4;
 const size_t ThreadPool::THREAD_NUM_MAX = 10;
 
-ThreadPool::ThreadPool(size_t thread_num = THREAD_NUM_DEFAULT) {
+ThreadPool::ThreadPool(size_t thread_num) {
     size_t num = thread_num > THREAD_NUM_MAX ? THREAD_NUM_MAX : thread_num;
     stop_.store(thread_num == 0 ? true : false);
     for (size_t i = 0; i < num; ++i) {

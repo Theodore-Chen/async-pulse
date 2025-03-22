@@ -36,3 +36,4 @@ build/
 
 # Project files
 .vscode/
+.cache/

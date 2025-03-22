@@ -19,6 +19,6 @@ add_executable(stl_util_ut ${LOCAL_TEST_FILES})
 
 target_link_libraries(stl_util_ut gtest gmock gcov)
 
-target_compile_options(stl_util_ut PRIVATE -g -std=c++11 -pthread -O3 -fPIC)
+target_compile_options(stl_util_ut PRIVATE -g -std=c++17 -pthread -O3 -fPIC -fno-exceptions )
 
 add_test(NAME stl_util_ut COMMAND stl_util_ut)

@@ -15,6 +15,7 @@ set(LOCAL_TEST_FILES
     ${ROOT_DIR}/test/thread_pool_bind_ut.cpp
     ${ROOT_DIR}/test/thread_pool_ut.cpp
     ${ROOT_DIR}/test/lock_queue_ut.cpp
+    ${ROOT_DIR}/test/lock_free_queue_ut.cpp
     ${ROOT_DIR}/test/fsm_ut.cpp
 )
 
@@ -27,7 +28,7 @@ add_executable(thread_pool_ut ${LOCAL_SRC_FILES} ${LOCAL_TEST_FILES})
 
 target_link_libraries(thread_pool_ut gtest gcov)
 
-target_compile_options(thread_pool_ut PRIVATE -g -std=c++11 -pthread -O3 -fPIC --coverage)
+target_compile_options(thread_pool_ut PRIVATE -g -std=c++17 -pthread -O3 -fPIC -fno-exceptions --coverage)
 
 include_directories(thread_pool_ut ${LOCAL_INC_DIRS})
 

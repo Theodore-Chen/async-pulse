@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
-#include <vector>
 #include <atomic>
 #include <future>
+#include <vector>
 
 #include <queue/lock_queue.h>
 
@@ -82,29 +82,47 @@ TEST(LockQueueUt, SingleInSingleOut) {
 }
 
 TEST(LockQueueUt, MultiInMultiOut) {
+    const size_t TASK_NUM = 10;
+    const size_t INFO_NUM = 10000;
+
     using Info = std::pair<uint32_t, uint32_t>;
-    auto inTask = [](uint32_t taskId, LockQueue<std::unique_ptr<Info>>& lq) -> void {
-        for (uint32_t i = 0; i < 1000; i++) {
-            std::unique_ptr<Info> in = std::make_unique<Info>(Info(taskId, i));
-            lq.Enqueue(std::move(in));
-        }
-    };
-    auto outTask = [](LockQueue<std::unique_ptr<Info>>& lq, std::vector<std::atomic<uint32_t>>& answer) -> void {
-        std::unique_ptr<Info> info;
-        while(lq.Dequeue(info)) {
-            EXPECT_NE(info, nullptr);
-            EXPECT_GE(info->first, 0);
-            EXPECT_LT(info->first, 10);
-            EXPECT_EQ(info->second, answer[info->first].load());
-            (answer[info->first])++;
-        }
-    };
     LockQueue<std::unique_ptr<Info>> lq;
-    for (uint32_t i = 0; i < 10; i++) {
-        std::async(std::launch::async, inTask, i, std::ref(lq));
+    std::vector<std::atomic<uint32_t>> answer(TASK_NUM);
+    std::vector<std::future<void>> threads;
+    std::atomic<uint32_t> enqueCnt(0);
+
+    auto inTask = [&lq, &enqueCnt](uint32_t taskId) -> void {
+        for (uint32_t i = 0; i < INFO_NUM; i++) {
+            lq.Enqueue(std::make_unique<Info>(Info(taskId, i)));
+            enqueCnt++;
+        }
+    };
+    for (uint32_t i = 0; i < TASK_NUM; i++) {
+        threads.emplace_back(std::async(std::launch::async, inTask, i));
     }
-    std::vector<std::atomic<uint32_t>> answer(10);
-    for (uint32_t i = 0; i < 10; i++) {
-        std::async(std::launch::async, outTask, std::ref(lq), std::ref(answer));
+
+    auto outTask = [&lq, &answer, &enqueCnt]() -> void {
+        std::unique_ptr<Info> info;
+        while (true) {
+            if (lq.Dequeue(info)) {
+                EXPECT_NE(info, nullptr);
+                answer[info->first] += info->second;
+            } else if (enqueCnt.load() == TASK_NUM * INFO_NUM) {
+                break;
+            } else {
+                std::this_thread::yield();
+            }
+        }
+    };
+    for (uint32_t i = 0; i < TASK_NUM; i++) {
+        threads.emplace_back(std::async(std::launch::async, outTask));
+    }
+
+    for (auto& t : threads) {
+        t.wait();
+    }
+    for (uint32_t taskId = 0; taskId < TASK_NUM; taskId++) {
+        constexpr uint32_t sum = (0 + INFO_NUM - 1) * INFO_NUM / 2;
+        EXPECT_EQ(answer[taskId].load(), sum);
     }
 }
