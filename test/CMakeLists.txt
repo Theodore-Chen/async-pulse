@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20.0)
 
 add_subdirectory(stl_util_ut)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -33,3 +33,7 @@ target_compile_options(thread_pool_ut PRIVATE -g -std=c++17 -pthread -O3 -fPIC -
 include_directories(thread_pool_ut ${LOCAL_INC_DIRS})
 
 add_test(NAME thread_pool_ut COMMAND thread_pool_ut)
+
+add_executable(avx_example avx_example.cpp)
+
+target_compile_options(avx_example PRIVATE -g -std=c++17 -pthread -O3 -fPIC -fno-exceptions -mavx2 -mfma)
