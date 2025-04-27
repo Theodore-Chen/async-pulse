@@ -28,6 +28,18 @@
 
 由于指定了回调函数，有效减少数据拷贝和移动，提高了执行效率
 
+#### queue
+
+以来`std::aiomic`内存模型机制，提供了基于链表和桶实现的无锁队列实现
+
+#### fsm
+
+提供了状态机模板实现，用于响应并调度用户事件，用户可以根据自己的需求，灵活地向状态机提供自定义的事件列表、状态迁移列表、事件行为等
+
+使用一个多生产者，单一消费者队列，由单一保护线程控制进入状态机的事件，使得状态机内部无需数据竞争
+
+使用了`std::promise`和`std::future`等待机制，简化代码实现
+
 #### sync
 
 提供了std::async函数、condition_variable、std::promise、std::future、std::shared_future等多种线程同步机制的实现实例
@@ -40,11 +52,35 @@
 
 ### test
 
+针对`src`中提供的实现，进行了单元测试
+
 #### thread_pool_bind_ut.cpp
 
 由于不需要准备测试套，所以仅需使用TEST测试套件，验证线程池功能
 
 用例覆盖：线程的创建和销毁、任务的提交和管理、线程同步和锁管理、错误处理、资源回收
+
+#### stl_util_ut
+
+为`std::vector`、`std::map`、`std::unordered_map`、`std::shared_ptr`等标准库实现进行了测试，以展示其特性和注意事项，包括并不限于：
+
+- 左值和右值处理
+- 拷贝复制和移动复制
+- 扩容逻辑、缩容逻辑
+- `std::unordered_map`的哈希碰撞处理
+- CRTP设计模式常用场景示例
+
+#### gemm_validation
+
+GEMM稠密矩阵乘法实现示例，使用AVX2指令集优化，并对比OpenBlas实现和Nvidia CUDA实现性能，验证结果如下：
+
+![gemm_validation_result](docs/images/gemm_validation_result.png)
+
+分析结果差异原因为：
+
+1. 朴素实现只启用了单线程，未考虑多线程并发和负载均衡
+2. 内存优化，针对CPU L1/L2/L3缓存大小进行优化分割
+3. 内存优化，矩阵重排，将输入矩阵转置以保证内存连续访问
 
 ## 编译
 

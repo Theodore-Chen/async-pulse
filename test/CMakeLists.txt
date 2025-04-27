@@ -34,7 +34,3 @@ target_compile_options(thread_pool_ut PRIVATE -g -std=c++17 -pthread -O3 -fPIC -
 include_directories(thread_pool_ut ${LOCAL_INC_DIRS})
 
 add_test(NAME thread_pool_ut COMMAND thread_pool_ut)
-
-add_executable(avx_example avx_example.cpp)
-
-target_compile_options(avx_example PRIVATE -g -std=c++17 -pthread -O3 -fPIC -fno-exceptions -mavx2 -mfma)
