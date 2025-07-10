@@ -37,3 +37,9 @@ build/
 # Project files
 .vscode/
 .cache/
+
+# Cmake local settings
+CMakePresets.json
+
+# Compiled Commands
+compile_commands.json

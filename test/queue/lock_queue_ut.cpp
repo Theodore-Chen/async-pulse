@@ -1,70 +1,70 @@
 #include <gtest/gtest.h>
+#include <queue/lock_queue.h>
+
 #include <atomic>
 #include <future>
 #include <vector>
 
-#include <queue/lock_queue.h>
-
 TEST(LockQueueUt, InitEmpty) {
     LockQueue<uint32_t> lq;
-    EXPECT_EQ(lq.Size(), 0);
-    EXPECT_EQ(lq.Empty(), true);
+    EXPECT_EQ(lq.size(), 0);
+    EXPECT_EQ(lq.empty(), true);
 }
 
 TEST(LockQueueUt, InitUnmovable) {
     LockQueue<std::unique_ptr<uint32_t>> lq;
-    EXPECT_EQ(lq.Size(), 0);
-    EXPECT_EQ(lq.Empty(), true);
+    EXPECT_EQ(lq.size(), 0);
+    EXPECT_EQ(lq.empty(), true);
 }
 
 TEST(LockQueueUt, EnqueueRvalue) {
     LockQueue<uint32_t> lq;
     uint32_t in = 10;
-    lq.Enqueue(std::move(in));
-    EXPECT_EQ(lq.Size(), 1);
-    EXPECT_EQ(lq.Empty(), false);
+    lq.enqueue(std::move(in));
+    EXPECT_EQ(lq.size(), 1);
+    EXPECT_EQ(lq.empty(), false);
 }
 
 TEST(LockQueueUt, EnqueueLvalue) {
     LockQueue<uint32_t> lq;
     uint32_t in = 10;
-    lq.Enqueue(in);
-    EXPECT_EQ(lq.Size(), 1);
-    EXPECT_EQ(lq.Empty(), false);
+    lq.enqueue(in);
+    EXPECT_EQ(lq.size(), 1);
+    EXPECT_EQ(lq.empty(), false);
 }
 
 TEST(LockQueueUt, DequeueRvalue) {
     LockQueue<uint32_t> lq;
     uint32_t in = 10;
-    lq.Enqueue(std::move(in));
+    lq.enqueue(std::move(in));
     uint32_t out;
-    EXPECT_EQ(lq.Dequeue(out), true);
+    EXPECT_EQ(lq.dequeue(out), true);
     EXPECT_EQ(out, in);
 }
 
 TEST(LockQueueUt, DequeueLvalue) {
     LockQueue<uint32_t> lq;
     uint32_t in = 10;
-    lq.Enqueue(in);
+    lq.enqueue(in);
     uint32_t out;
-    EXPECT_EQ(lq.Dequeue(out), true);
+    EXPECT_EQ(lq.dequeue(out), true);
     EXPECT_EQ(out, in);
 }
 
 TEST(LockQueueUt, EnqueueUnmovable) {
     LockQueue<std::unique_ptr<uint32_t>> lq;
     std::unique_ptr<uint32_t> in = std::make_unique<uint32_t>(42);
-    lq.Enqueue(std::move(in));
-    EXPECT_EQ(lq.Size(), 1);
-    EXPECT_EQ(lq.Empty(), false);
+    lq.enqueue(std::move(in));
+    EXPECT_EQ(lq.size(), 1);
+    EXPECT_EQ(lq.empty(), false);
 }
 
 TEST(LockQueueUt, DequeueUnmovable) {
     LockQueue<std::unique_ptr<uint32_t>> lq;
     std::unique_ptr<uint32_t> in = std::make_unique<uint32_t>(42);
-    lq.Enqueue(std::move(in));
+    lq.enqueue(std::move(in));
     std::unique_ptr<uint32_t> out;
-    EXPECT_EQ(lq.Dequeue(out), true);
+    EXPECT_EQ(lq.dequeue(out), true);
     EXPECT_EQ(*out, 42);
 }
 
@@ -72,11 +72,11 @@ TEST(LockQueueUt, SingleInSingleOut) {
     LockQueue<std::unique_ptr<uint32_t>> lq;
     for (uint32_t i = 0; i < 1000; i++) {
         std::unique_ptr<uint32_t> in = std::make_unique<uint32_t>(i);
-        lq.Enqueue(std::move(in));
+        lq.enqueue(std::move(in));
     }
     for (uint32_t i = 0; i < 1000; i++) {
         std::unique_ptr<uint32_t> out;
-        EXPECT_EQ(lq.Dequeue(out), true);
+        EXPECT_EQ(lq.dequeue(out), true);
         EXPECT_EQ(*out, i);
     }
 }
@@ -93,7 +93,7 @@ TEST(LockQueueUt, MultiInMultiOut) {
 
     auto inTask = [&lq, &enqueCnt](uint32_t taskId) -> void {
         for (uint32_t i = 0; i < INFO_NUM; i++) {
-            lq.Enqueue(std::make_unique<Info>(Info(taskId, i)));
+            lq.enqueue(std::make_unique<Info>(Info(taskId, i)));
             enqueCnt++;
         }
     };
@@ -104,7 +104,7 @@ TEST(LockQueueUt, MultiInMultiOut) {
     auto outTask = [&lq, &answer, &enqueCnt]() -> void {
         std::unique_ptr<Info> info;
         while (true) {
-            if (lq.Dequeue(info)) {
+            if (lq.dequeue(info)) {
                 EXPECT_NE(info, nullptr);
                 answer[info->first] += info->second;
             } else if (enqueCnt.load() == TASK_NUM * INFO_NUM) {

@@ -31,16 +31,17 @@ class FSM {
     std::future<void> Submit(Event event) {
         Handle handle(event, std::promise<void>());
         std::future<void> fut = handle.second.get_future();
-        queue_.Enqueue(std::move(handle));
+        queue_.enqueue(std::move(handle));
         return fut;
     }
-    State GetState() { return curState_; }
+    State GetState() {
+        return curState_;
+    }
 
    private:
     class FSMProcessor {
        public:
-        FSMProcessor(FSM<State, Event>* fsm,
-                     StateTable<State, Event>* stateTable,
+        FSMProcessor(FSM<State, Event>* fsm, StateTable<State, Event>* stateTable,
                      StateChangeTable<State, Event>* changeTable)
             : fsm_(fsm), stateTable_(stateTable), changeTable_(changeTable) {}
         void operator()() {
@@ -49,7 +50,7 @@ class FSM {
             }
             Handle handle;
             while (fsm_->ready_.load() == true) {
-                if (fsm_->pause_.load() == false && fsm_->queue_.Dequeue(handle)) {
+                if (fsm_->pause_.load() == false && fsm_->queue_.dequeue(handle)) {
                     stateTable_.Callback(fsm_->curState_, handle.first);
                     ChangeState(handle.first);
                     handle.second.set_value();

@@ -13,23 +13,23 @@ class LockQueue {
     LockQueue(LockQueue&&) = delete;
     LockQueue& operator=(LockQueue&&) = delete;
 
-    bool Empty() {
+    bool empty() {
         std::lock_guard<std::mutex> lock(mtx_);
         return queue_.empty();
     }
 
-    int Size() {
+    int size() {
         std::lock_guard<std::mutex> lock(mtx_);
         return queue_.size();
     }
 
     template <typename Arg>
-    void Enqueue(Arg&& t) {
+    void enqueue(Arg&& t) {
         std::lock_guard<std::mutex> lock(mtx_);
         queue_.push(std::forward<Arg>(t));
     }
 
-    bool Dequeue(T& t) {
+    bool dequeue(T& t) {
         std::lock_guard<std::mutex> lock(mtx_);
 
         if (queue_.empty()) {

@@ -1,8 +1,4 @@
-cmake_minimum_required(VERSION 3.18)
-project(MatrixBenchmark LANGUAGES CXX CUDA) # 显式声明CUDA语言支持
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+project(MatrixBenchmark LANGUAGES CXX)
 
 add_executable(gemm_validation)
 
@@ -14,28 +10,28 @@ target_sources(gemm_validation PRIVATE
 
 target_compile_options(gemm_validation PRIVATE -g -std=c++17 -pthread -O3 -fPIC -mavx2 -mfma)
 
-# openblas库调用支持
-target_sources(gemm_validation PRIVATE openblas_gemm.cpp)
+find_package(BLAS QUIET)
 
-include_directories(/home/zqc/local/openblas/include/openblas)
+if(BLAS_FOUND)
+    target_sources(gemm_validation PRIVATE openblas_gemm.cpp)
 
-target_link_directories(gemm_validation PRIVATE /home/zqc/local/openblas/lib)
+    target_link_libraries(gemm_validation PRIVATE BLAS::BLAS)
 
-target_link_libraries(gemm_validation PRIVATE openblas)
+    target_compile_definitions(gemm_validation PRIVATE HAS_OPENBLAS)
+endif()
 
-# CUDA调用支持
-enable_language(CUDA)
+find_package(CUDAToolkit QUIET)
+if(CUDAToolkit_FOUND)
+    enable_language(CUDA)
 
-target_sources(gemm_validation PRIVATE cublas_gemm.cpp)
+    target_sources(gemm_validation PRIVATE cublas_gemm.cpp)
 
-include_directories(/usr/local/cuda-12.6/targets/x86_64-linux/include)
+    target_link_libraries(gemm_validation PRIVATE CUDA::cublas CUDA::cudart)
 
-# 设置CUDA编译参数
-target_compile_options(gemm_validation PRIVATE
-    $<$<COMPILE_LANGUAGE:CUDA>:--default-stream per-thread>
-    $<$<COMPILE_LANGUAGE:CUDA>:-O3>
-)
+    target_compile_options(gemm_validation PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:--default-stream per-thread -O3>
+    )
 
-target_link_directories(gemm_validation PRIVATE /usr/local/cuda-12.6/targets/x86_64-linux/lib)
+    target_compile_definitions(gemm_validation PRIVATE HAS_CUDA)
+endif()
 
-target_link_libraries(gemm_validation PRIVATE cudart cublas)

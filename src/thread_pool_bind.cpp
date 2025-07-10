@@ -1,5 +1,4 @@
 #include "thread_pool_bind.h"
-#include <gtest/gtest.h>
 
 const size_t ThreadPool::THREAD_NUM_DEFAULT = 4;
 const size_t ThreadPool::THREAD_NUM_MAX = 10;

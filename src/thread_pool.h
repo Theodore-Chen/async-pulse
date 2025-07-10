@@ -69,7 +69,7 @@ inline std::future<Data> ThreadPool<Data>::Submit(Data&& data) {
     }
     PrmsData prmsData(std::forward<Data>(data), std::promise<Data>());
     std::future<Data> result = prmsData.second.get_future();
-    queue_.Enqueue(std::move(prmsData));
+    queue_.enqueue(std::move(prmsData));
     return result;
 }
 
@@ -77,7 +77,7 @@ template <typename Data>
 void ThreadPool<Data>::ThreadTask(ThreadPool* tp) {
     while (tp->ready_.load()) {
         PrmsData data;
-        if (tp->queue_.Dequeue(data)) {
+        if (tp->queue_.dequeue(data)) {
             tp->callback_(data.first);
             data.second.set_value(std::move(data.first));
         }
