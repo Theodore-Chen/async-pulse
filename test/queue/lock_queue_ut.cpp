@@ -1,7 +1,6 @@
 #include <gtest/gtest.h>
 #include <queue/lock_queue.h>
 
-#include <atomic>
 #include <future>
 #include <vector>
 

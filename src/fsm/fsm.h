@@ -21,6 +21,7 @@ class FSM {
     }
     ~FSM() {
         ready_.store(false);
+        queue_.close();
         pooling_.wait();
     }
     FSM(const FSM&) = delete;

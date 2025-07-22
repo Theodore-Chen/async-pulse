@@ -3,9 +3,6 @@
 #include <atomic>
 #include <functional>
 #include <future>
-#include <iostream>
-#include <mutex>
-#include <queue>
 #include <thread>
 #include <vector>
 
@@ -87,6 +84,7 @@ void ThreadPool<Data>::ThreadTask(ThreadPool* tp) {
 template <typename Data>
 inline void ThreadPool<Data>::Destroy() {
     ready_.store(false);
+    queue_.close();
     for (auto& th : threads_) {
         if (th.joinable()) {
             th.join();
