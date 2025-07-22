@@ -43,7 +43,7 @@ class ThreadPool {
     CallBack callback_{nullptr};
     std::vector<std::thread> threads_;
     std::atomic<bool> ready_{false};
-    LockQueue<PrmsData> queue_;
+    lock_queue<PrmsData> queue_;
 };
 
 template <typename Data>

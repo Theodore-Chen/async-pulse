@@ -80,7 +80,7 @@ class FSM {
 
    private:
     std::future<void> pooling_;
-    LockQueue<Handle> queue_;
+    lock_queue<Handle> queue_;
     std::atomic<State> curState_;
     std::atomic<bool> pause_{true};
     std::atomic<bool> ready_{false};

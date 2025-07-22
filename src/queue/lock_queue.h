@@ -1,17 +1,21 @@
 #pragma once
 
+#include <condition_variable>
 #include <mutex>
 #include <queue>
 
 template <typename T>
-class LockQueue {
+class lock_queue {
    public:
-    LockQueue() {}
-    ~LockQueue() {}
-    LockQueue(const LockQueue&) = delete;
-    LockQueue& operator=(const LockQueue&) = delete;
-    LockQueue(LockQueue&&) = delete;
-    LockQueue& operator=(LockQueue&&) = delete;
+    lock_queue() {}
+    ~lock_queue() {
+        close();
+        clear();
+    }
+    lock_queue(const lock_queue&) = delete;
+    lock_queue& operator=(const lock_queue&) = delete;
+    lock_queue(lock_queue&&) = delete;
+    lock_queue& operator=(lock_queue&&) = delete;
 
     bool empty() {
         std::lock_guard<std::mutex> lock(mtx_);
@@ -24,24 +28,56 @@ class LockQueue {
     }
 
     template <typename Arg>
-    void enqueue(Arg&& t) {
-        std::lock_guard<std::mutex> lock(mtx_);
-        queue_.push(std::forward<Arg>(t));
+    bool enqueue(Arg&& t) {
+        {
+            std::lock_guard<std::mutex> lock(mtx_);
+            if (closed_ == true) {
+                return false;
+            }
+            queue_.push(std::forward<Arg>(t));
+        }
+        cond_.notify_one();
+        return true;
     }
 
     bool dequeue(T& t) {
-        std::lock_guard<std::mutex> lock(mtx_);
+        std::unique_lock<std::mutex> lock(mtx_);
+        cond_.wait(lock, [this]() { return !queue_.empty() || closed_; });
 
-        if (queue_.empty()) {
+        if (queue_.empty() && closed_) {
             return false;
         }
-        t = std::move(queue_.front());
 
+        t = std::move(queue_.front());
         queue_.pop();
         return true;
+    }
+
+    void close() {
+        {
+            std::lock_guard<std::mutex> lock(mtx_);
+            if (closed_) {
+                return;
+            }
+            closed_ = true;
+        }
+        cond_.notify_all();
+    }
+
+    bool is_closed() {
+        std::lock_guard<std::mutex> lock(mtx_);
+        return closed_;
+    }
+
+    void clear() {
+        std::lock_guard<std::mutex> lock(mtx_);
+        std::queue<T> empty_queue;
+        queue_.swap(empty_queue);
     }
 
    private:
     std::queue<T> queue_;
     std::mutex mtx_;
+    std::condition_variable cond_;
+    bool closed_{false};
 };

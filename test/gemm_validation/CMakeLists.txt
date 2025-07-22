@@ -21,6 +21,7 @@ if(BLAS_FOUND)
 endif()
 
 find_package(CUDAToolkit QUIET)
+
 if(CUDAToolkit_FOUND)
     enable_language(CUDA)
 

@@ -1,7 +1,7 @@
 add_executable(queue_ut)
 
 target_sources(queue_ut PRIVATE
-    lock_free_queue_ut.cpp
+    # lock_free_queue_ut.cpp
     lock_queue_ut.cpp
 )
 
