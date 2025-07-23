@@ -37,21 +37,21 @@ TEST(LockQueueUt, DequeueRvalue) {
     lock_queue<uint32_t> lq;
     uint32_t in = 10;
     lq.enqueue(std::move(in));
-    uint32_t out;
-    EXPECT_EQ(lq.dequeue(out), true);
-    EXPECT_EQ(out, in);
+    std::optional<uint32_t> out = lq.dequeue();
+    EXPECT_TRUE(out.has_value());
+    EXPECT_EQ(out.value(), in);
 }
 
 TEST(LockQueueUt, DequeueLvalue) {
     lock_queue<uint32_t> lq;
     uint32_t in = 10;
     lq.enqueue(in);
-    uint32_t out;
-    EXPECT_EQ(lq.dequeue(out), true);
-    EXPECT_EQ(out, in);
+    std::optional<uint32_t> out = lq.dequeue();
+    EXPECT_TRUE(out.has_value());
+    EXPECT_EQ(out.value(), in);
 }
 
-TEST(LockQueueUt, EnqueueUnmovable) {
+TEST(LockQueueUt, EnqueueUncopyable) {
     lock_queue<std::unique_ptr<uint32_t>> lq;
     std::unique_ptr<uint32_t> in = std::make_unique<uint32_t>(42);
     lq.enqueue(std::move(in));
@@ -59,13 +59,13 @@ TEST(LockQueueUt, EnqueueUnmovable) {
     EXPECT_EQ(lq.empty(), false);
 }
 
-TEST(LockQueueUt, DequeueUnmovable) {
+TEST(LockQueueUt, DequeueUncopyable) {
     lock_queue<std::unique_ptr<uint32_t>> lq;
     std::unique_ptr<uint32_t> in = std::make_unique<uint32_t>(42);
     lq.enqueue(std::move(in));
-    std::unique_ptr<uint32_t> out;
-    EXPECT_EQ(lq.dequeue(out), true);
-    EXPECT_EQ(*out, 42);
+    std::optional<std::unique_ptr<uint32_t>> out = lq.dequeue();
+    EXPECT_TRUE(out.has_value());
+    EXPECT_EQ(**out, 42);
 }
 
 TEST(LockQueueUt, EnqueueClose) {
@@ -80,8 +80,8 @@ TEST(LockQueueUt, DequeueClose) {
     lock_queue<uint32_t> lq;
 
     auto consumer_task = [&lq]() {
-        uint32_t out;
-        EXPECT_FALSE(lq.dequeue(out));
+        std::optional<uint32_t> out = lq.dequeue();
+        EXPECT_FALSE(out.has_value());
     };
     auto fut = std::async(std::launch::async, consumer_task);
 
@@ -102,9 +102,9 @@ TEST(LockQueueUt, Clear) {
     lq.enqueue(3);
     EXPECT_EQ(lq.size(), 1);
 
-    uint32_t out;
-    EXPECT_TRUE(lq.dequeue(out));
-    EXPECT_EQ(out, 3);
+    std::optional<uint32_t> out = lq.dequeue();
+    EXPECT_TRUE(out.has_value());
+    EXPECT_EQ(out.value(), 3);
 }
 
 TEST(LockQueueUt, DestructorWakesUpConsumer) {
@@ -114,8 +114,8 @@ TEST(LockQueueUt, DestructorWakesUpConsumer) {
 
     auto consumer_task = [&lq_ptr](std::promise<void> p) {
         p.set_value();
-        uint32_t out;
-        EXPECT_FALSE(lq_ptr->dequeue(out));
+        std::optional<uint32_t> out = lq_ptr->dequeue();
+        EXPECT_FALSE(out.has_value());
     };
     auto fut = std::async(std::launch::async, consumer_task, std::move(ready_promise));
 
@@ -125,15 +125,16 @@ TEST(LockQueueUt, DestructorWakesUpConsumer) {
 }
 
 TEST(LockQueueUt, SingleInSingleOut) {
+    const size_t INFO_NUM = 10000;
     lock_queue<std::unique_ptr<uint32_t>> lq;
-    for (uint32_t i = 0; i < 1000; i++) {
+    for (uint32_t i = 0; i < INFO_NUM; i++) {
         std::unique_ptr<uint32_t> in = std::make_unique<uint32_t>(i);
         lq.enqueue(std::move(in));
     }
-    for (uint32_t i = 0; i < 1000; i++) {
-        std::unique_ptr<uint32_t> out;
-        EXPECT_EQ(lq.dequeue(out), true);
-        EXPECT_EQ(*out, i);
+    for (uint32_t i = 0; i < INFO_NUM; i++) {
+        std::optional<std::unique_ptr<uint32_t>> out = lq.dequeue();
+        EXPECT_TRUE(out.has_value());
+        EXPECT_EQ(**out, i);
     }
 }
 
@@ -142,8 +143,8 @@ TEST(LockQueueUt, MultiInMultiOut) {
     const size_t CONSUMER_NUM = 10;
     const size_t INFO_NUM = 10000;
 
-    using Info = std::pair<uint32_t, uint32_t>;
-    lock_queue<std::unique_ptr<Info>> lq;
+    using Item = std::pair<uint32_t, uint32_t>;
+    lock_queue<std::unique_ptr<Item>> lq;
 
     std::vector<std::future<void>> producer_threads;
     std::vector<std::future<void>> consumer_threads;
@@ -155,17 +156,16 @@ TEST(LockQueueUt, MultiInMultiOut) {
 
     auto producer_task = [&lq](uint32_t taskId) {
         for (uint32_t i = 0; i < INFO_NUM; i++) {
-            lq.enqueue(std::make_unique<Info>(taskId, i));
+            lq.enqueue(std::make_unique<Item>(taskId, i));
         }
     };
 
     auto consumer_task = [&lq, &received_orders]() {
-        std::unique_ptr<Info> info;
-        while (lq.dequeue(info)) {
-            ASSERT_NE(info, nullptr);
-            ASSERT_LT(info->first, received_orders.size());
-            ASSERT_LT(info->second, received_orders[info->first].size());
-            received_orders[info->first][info->second] = info->second;
+        while (std::optional<std::unique_ptr<Item>> out = lq.dequeue()) {
+            Item item = std::move(**out);
+            ASSERT_LT(item.first, received_orders.size());
+            ASSERT_LT(item.second, received_orders[item.first].size());
+            received_orders[item.first][item.second] = item.second;
         }
     };
 

@@ -49,12 +49,13 @@ class FSM {
             if (!fsm_) {
                 return;
             }
-            Handle handle;
             while (fsm_->ready_.load() == true) {
-                if (fsm_->pause_.load() == false && fsm_->queue_.dequeue(handle)) {
-                    stateTable_.Callback(fsm_->curState_, handle.first);
-                    ChangeState(handle.first);
-                    handle.second.set_value();
+                if (fsm_->pause_.load() == false) {
+                    if (std::optional<Handle> handle = fsm_->queue_.dequeue()) {
+                        stateTable_.Callback(fsm_->curState_, handle.value().first);
+                        ChangeState(handle.value().first);
+                        handle.value().second.set_value();
+                    }
                 }
             }
         }

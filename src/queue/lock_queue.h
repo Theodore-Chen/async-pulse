@@ -2,6 +2,7 @@
 
 #include <condition_variable>
 #include <mutex>
+#include <optional>
 #include <queue>
 
 template <typename T>
@@ -40,17 +41,17 @@ class lock_queue {
         return true;
     }
 
-    bool dequeue(T& t) {
+    std::optional<T> dequeue() {
         std::unique_lock<std::mutex> lock(mtx_);
         cond_.wait(lock, [this]() { return !queue_.empty() || closed_; });
 
         if (queue_.empty() && closed_) {
-            return false;
+            return std::nullopt;
         }
 
-        t = std::move(queue_.front());
+        T t = std::move(queue_.front());
         queue_.pop();
-        return true;
+        return t;
     }
 
     void close() {
