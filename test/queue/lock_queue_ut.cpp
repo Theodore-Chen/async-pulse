@@ -2,6 +2,7 @@
 #include <queue/lock_queue.h>
 
 #include <future>
+#include <thread>
 #include <vector>
 
 TEST(LockQueueUt, InitEmpty) {
@@ -65,6 +66,62 @@ TEST(LockQueueUt, DequeueUnmovable) {
     std::unique_ptr<uint32_t> out;
     EXPECT_EQ(lq.dequeue(out), true);
     EXPECT_EQ(*out, 42);
+}
+
+TEST(LockQueueUt, EnqueueClose) {
+    lock_queue<uint32_t> lq;
+    lq.close();
+    EXPECT_TRUE(lq.is_closed());
+    EXPECT_FALSE(lq.enqueue(42));
+    EXPECT_EQ(lq.size(), 0);
+}
+
+TEST(LockQueueUt, DequeueClose) {
+    lock_queue<uint32_t> lq;
+
+    auto consumer_task = [&lq]() {
+        uint32_t out;
+        EXPECT_FALSE(lq.dequeue(out));
+    };
+    auto fut = std::async(std::launch::async, consumer_task);
+
+    lq.close();
+    fut.wait();
+}
+
+TEST(LockQueueUt, Clear) {
+    lock_queue<uint32_t> lq;
+    lq.enqueue(1);
+    lq.enqueue(2);
+    ASSERT_EQ(lq.size(), 2);
+
+    lq.clear();
+    EXPECT_EQ(lq.size(), 0);
+    EXPECT_TRUE(lq.empty());
+
+    lq.enqueue(3);
+    EXPECT_EQ(lq.size(), 1);
+
+    uint32_t out;
+    EXPECT_TRUE(lq.dequeue(out));
+    EXPECT_EQ(out, 3);
+}
+
+TEST(LockQueueUt, DestructorWakesUpConsumer) {
+    std::unique_ptr<lock_queue<uint32_t>> lq_ptr = std::make_unique<lock_queue<uint32_t>>();
+    std::promise<void> ready_promise;
+    std::future<void> ready_future = ready_promise.get_future();
+
+    auto consumer_task = [&lq_ptr](std::promise<void> p) {
+        p.set_value();
+        uint32_t out;
+        EXPECT_FALSE(lq_ptr->dequeue(out));
+    };
+    auto fut = std::async(std::launch::async, consumer_task, std::move(ready_promise));
+
+    ready_future.wait();
+    lq_ptr.reset();
+    EXPECT_EQ(fut.wait_for(std::chrono::milliseconds(50)), std::future_status::ready);
 }
 
 TEST(LockQueueUt, SingleInSingleOut) {
