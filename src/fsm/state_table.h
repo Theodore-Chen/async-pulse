@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <map>
 
 template <typename Event>
 using Action = std::function<void(Event event)>;
@@ -17,9 +18,7 @@ struct FsmState {
 template <typename State, typename Event>
 using StateTable = std::map<State, FsmState<State, Event>>;
 
-template <typename State,
-          typename Event,
-          typename std::enable_if<std::is_enum<State>::value, bool>::type = true,
+template <typename State, typename Event, typename std::enable_if<std::is_enum<State>::value, bool>::type = true,
           typename std::enable_if<std::is_enum<Event>::value, bool>::type = true>
 class FsmStateTable {
    public:
@@ -57,9 +56,7 @@ class FsmStateTable {
 template <typename State, typename Event>
 using StateChangeTable = std::map<State, std::map<Event, State>>;
 
-template <typename State,
-          typename Event,
-          typename std::enable_if<std::is_enum<State>::value, bool>::type = true,
+template <typename State, typename Event, typename std::enable_if<std::is_enum<State>::value, bool>::type = true,
           typename std::enable_if<std::is_enum<Event>::value, bool>::type = true>
 class FsmStateChangeTable {
    public:

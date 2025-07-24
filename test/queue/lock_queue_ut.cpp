@@ -1,9 +1,10 @@
 #include <gtest/gtest.h>
-#include <queue/lock_queue.h>
 
 #include <future>
 #include <thread>
 #include <vector>
+
+#include "queue/lock_queue.h"
 
 TEST(LockQueueUt, InitEmpty) {
     lock_queue<uint32_t> lq;
@@ -120,6 +121,7 @@ TEST(LockQueueUt, DestructorWakesUpConsumer) {
     auto fut = std::async(std::launch::async, consumer_task, std::move(ready_promise));
 
     ready_future.wait();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
     lq_ptr.reset();
     EXPECT_EQ(fut.wait_for(std::chrono::milliseconds(50)), std::future_status::ready);
 }
