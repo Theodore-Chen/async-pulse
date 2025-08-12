@@ -39,9 +39,9 @@ class lock_bounded_queue {
         return queue_status::SUCCESS;
     }
 
-    bool enqueue(const value_type& val) {
-        std::lock_guard<std::mutex> lock(mtx_);
-    }
+    // bool enqueue(const value_type& val) {
+    //     std::lock_guard<std::mutex> lock(mtx_);
+    // }
 
     std::optional<T> dequeue() {
         std::unique_lock<std::mutex> lock(mtx_);

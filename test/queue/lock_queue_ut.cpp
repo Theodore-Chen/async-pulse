@@ -28,7 +28,7 @@ template <typename T>
 struct queue_fectory<lock_bounded_queue<T>> {
     static std::unique_ptr<lock_bounded_queue<T>> create() {
         constexpr size_t capacity = 2048;
-        return std::make_unique<lock_bounded_queue<T>>(capacity, capacity * 0.8, capacity * 0.2);
+        return std::make_unique<lock_bounded_queue<T>>(capacity);
     }
 };
 

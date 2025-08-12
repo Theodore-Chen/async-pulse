@@ -26,31 +26,58 @@ class lock_queue {
         return queue_.empty();
     }
 
-    int size() {
+    size_t size() {
         std::lock_guard<std::mutex> lock(mtx_);
         return queue_.size();
     }
 
+    template <typename Func>
+    bool enqueue_with(Func&& f) {
+        {
+            std::lock_guard<std::mutex> lock(mtx_);
+            if (closed_) {
+                return false;
+            }
+            std::forward<Func>(f)();
+        }
+        cond_.notify_one();
+        return true;
+    }
+
     bool enqueue(const value_type& val) {
-        return enqueue_impl([this, &val]() { queue_.push(val); });
+        return enqueue_with([this, &val]() { queue_.push(val); });
     }
 
     bool enqueue(value_type&& val) {
-        return enqueue_impl([this, &val]() { queue_.push(std::move(val)); });
+        return enqueue_with([this, &val]() { queue_.push(std::move(val)); });
     }
 
     template <typename... Args>
     bool emplace(Args&&... args) {
-        return enqueue_impl([this, &args...]() { queue_.emplace(std::forward<Args>(args)...); });
+        return enqueue_with([this, &args...]() { queue_.emplace(std::forward<Args>(args)...); });
+    }
+
+    template <typename Func>
+    bool dequeue_with(Func&& f) {
+        std::unique_lock<std::mutex> lock(mtx_);
+        cond_.wait(lock, [this]() { return !queue_.empty() || closed_; });
+
+        if (queue_.empty() && closed_) {
+            return false;
+        }
+
+        std::forward<Func>(f)(std::move(queue_.front()));
+        queue_.pop();
+        return true;
     }
 
     bool dequeue(value_type& val) {
-        return dequeue_impl([&val](value_type&& item) { val = std::move(item); });
+        return dequeue_with([&val](value_type&& item) { val = std::move(item); });
     }
 
     std::optional<value_type> dequeue() {
         std::optional<value_type> result;
-        dequeue_impl([&result](value_type&& val) { result.emplace(std::move(val)); });
+        dequeue_with([&result](value_type&& val) { result.emplace(std::move(val)); });
         return result;
     }
 
@@ -74,34 +101,6 @@ class lock_queue {
         std::lock_guard<std::mutex> lock(mtx_);
         std::queue<value_type> empty_queue;
         queue_.swap(empty_queue);
-    }
-
-   private:
-    template <typename Func>
-    bool enqueue_impl(Func&& f) {
-        {
-            std::lock_guard<std::mutex> lock(mtx_);
-            if (closed_) {
-                return false;
-            }
-            std::forward<Func>(f)();
-        }
-        cond_.notify_one();
-        return true;
-    }
-
-    template <typename Func>
-    bool dequeue_impl(Func&& f) {
-        std::unique_lock<std::mutex> lock(mtx_);
-        cond_.wait(lock, [this]() { return !queue_.empty() || closed_; });
-
-        if (queue_.empty() && closed_) {
-            return false;
-        }
-
-        std::forward<Func>(f)(std::move(queue_.front()));
-        queue_.pop();
-        return true;
     }
 
    private:
