@@ -4,7 +4,56 @@
 #include <thread>
 #include <vector>
 
+#include "queue/lock_bounded_queue.h"
 #include "queue/lock_queue.h"
+
+using lock_queue_t = lock_queue<uint32_t>;
+using lock_queue_uncopyable_t = lock_queue<std::unique_ptr<uint32_t>>;
+using bounded_queue_t = lock_bounded_queue<uint32_t>;
+using bounded_queue_uncopyable_t = lock_bounded_queue<std::unique_ptr<uint32_t>>;
+
+using queue_impls = ::testing::Types<lock_queue_t, bounded_queue_t>;
+
+template <typename T>
+struct queue_fectory;
+
+template <typename T>
+struct queue_fectory<lock_queue<T>> {
+    static std::unique_ptr<lock_queue<T>> create() {
+        return std::make_unique<lock_queue<T>>();
+    }
+};
+
+template <typename T>
+struct queue_fectory<lock_bounded_queue<T>> {
+    static std::unique_ptr<lock_bounded_queue<T>> create() {
+        constexpr size_t capacity = 2048;
+        return std::make_unique<lock_bounded_queue<T>>(capacity, capacity * 0.8, capacity * 0.2);
+    }
+};
+
+template <typename T>
+class lock_queue_ut : public ::testing::Test {
+   protected:
+    void SetUp() override {
+        queue_ = queue_fectory<T>::create();
+    }
+    std::unique_ptr<T> queue_;
+};
+
+TYPED_TEST_SUITE(lock_queue_ut, queue_impls);
+
+TYPED_TEST(lock_queue_ut, init_empty) {
+    EXPECT_EQ(this->queue_->size(), 0);
+    EXPECT_EQ(this->queue_->empty(), true);
+}
+
+// TYPED_TEST(lock_queue_ut, enqueue_lvalue) {
+//     uint32_t in = 42;
+//     this->queue_->enqueue(in);
+//     EXPECT_EQ(this->queue_.size(), 1);
+//     EXPECT_FALSE(this->queue_.empty());
+// }
 
 TEST(LockQueueUt, InitEmpty) {
     lock_queue<uint32_t> lq;
@@ -67,6 +116,12 @@ TEST(LockQueueUt, DequeueUncopyable) {
     std::optional<std::unique_ptr<uint32_t>> out = lq.dequeue();
     EXPECT_TRUE(out.has_value());
     EXPECT_EQ(**out, 42);
+}
+
+TEST(LockQueueUt, IsClosed) {
+    lock_queue<uint32_t> lq;
+    lq.close();
+    EXPECT_TRUE(lq.is_closed());
 }
 
 TEST(LockQueueUt, EnqueueClose) {

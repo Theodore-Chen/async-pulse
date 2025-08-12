@@ -8,6 +8,9 @@
 template <typename T>
 class lock_queue {
    public:
+    using value_type = T;
+
+   public:
     lock_queue() {}
     ~lock_queue() {
         close();
@@ -28,30 +31,27 @@ class lock_queue {
         return queue_.size();
     }
 
-    template <typename Arg>
-    bool enqueue(Arg&& t) {
-        {
-            std::lock_guard<std::mutex> lock(mtx_);
-            if (closed_ == true) {
-                return false;
-            }
-            queue_.push(std::forward<Arg>(t));
-        }
-        cond_.notify_one();
-        return true;
+    bool enqueue(const value_type& val) {
+        return enqueue_impl([this, &val]() { queue_.push(val); });
     }
 
-    std::optional<T> dequeue() {
-        std::unique_lock<std::mutex> lock(mtx_);
-        cond_.wait(lock, [this]() { return !queue_.empty() || closed_; });
+    bool enqueue(value_type&& val) {
+        return enqueue_impl([this, &val]() { queue_.push(std::move(val)); });
+    }
 
-        if (queue_.empty() && closed_) {
-            return std::nullopt;
-        }
+    template <typename... Args>
+    bool emplace(Args&&... args) {
+        return enqueue_impl([this, &args...]() { queue_.emplace(std::forward<Args>(args)...); });
+    }
 
-        T t = std::move(queue_.front());
-        queue_.pop();
-        return t;
+    bool dequeue(value_type& val) {
+        return dequeue_impl([&val](value_type&& item) { val = std::move(item); });
+    }
+
+    std::optional<value_type> dequeue() {
+        std::optional<value_type> result;
+        dequeue_impl([&result](value_type&& val) { result.emplace(std::move(val)); });
+        return result;
     }
 
     void close() {
@@ -72,12 +72,40 @@ class lock_queue {
 
     void clear() {
         std::lock_guard<std::mutex> lock(mtx_);
-        std::queue<T> empty_queue;
+        std::queue<value_type> empty_queue;
         queue_.swap(empty_queue);
     }
 
    private:
-    std::queue<T> queue_;
+    template <typename Func>
+    bool enqueue_impl(Func&& f) {
+        {
+            std::lock_guard<std::mutex> lock(mtx_);
+            if (closed_) {
+                return false;
+            }
+            std::forward<Func>(f)();
+        }
+        cond_.notify_one();
+        return true;
+    }
+
+    template <typename Func>
+    bool dequeue_impl(Func&& f) {
+        std::unique_lock<std::mutex> lock(mtx_);
+        cond_.wait(lock, [this]() { return !queue_.empty() || closed_; });
+
+        if (queue_.empty() && closed_) {
+            return false;
+        }
+
+        std::forward<Func>(f)(std::move(queue_.front()));
+        queue_.pop();
+        return true;
+    }
+
+   private:
+    std::queue<value_type> queue_;
     std::mutex mtx_;
     std::condition_variable cond_;
     bool closed_{false};
