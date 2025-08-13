@@ -12,48 +12,262 @@ using lock_queue_uncopyable_t = lock_queue<std::unique_ptr<uint32_t>>;
 using bounded_queue_t = lock_bounded_queue<uint32_t>;
 using bounded_queue_uncopyable_t = lock_bounded_queue<std::unique_ptr<uint32_t>>;
 
-using queue_impls = ::testing::Types<lock_queue_t, bounded_queue_t>;
+using queue_impls = ::testing::Types<lock_queue<uint32_t>, lock_bounded_queue<uint32_t>>;
+
+template <typename T, typename = void>
+struct has_capacity : std::false_type {};
 
 template <typename T>
-struct queue_fectory;
+struct has_capacity<T, std::void_t<decltype(std::declval<T>().capacity())>> : std::true_type {};
 
 template <typename T>
-struct queue_fectory<lock_queue<T>> {
-    static std::unique_ptr<lock_queue<T>> create() {
-        return std::make_unique<lock_queue<T>>();
+inline constexpr bool has_capacity_v = has_capacity<T>::value;
+
+template <typename QueueType, size_t Capacity = 2048, typename Enable = void>
+struct queue_factory;
+
+template <typename QueueType, size_t Capacity>
+struct queue_factory<QueueType, Capacity, std::enable_if_t<has_capacity_v<QueueType>>> {
+    static const size_t capacity_ = Capacity;
+    static std::unique_ptr<QueueType> create() {
+        return std::make_unique<QueueType>(capacity_);
     }
 };
 
-template <typename T>
-struct queue_fectory<lock_bounded_queue<T>> {
-    static std::unique_ptr<lock_bounded_queue<T>> create() {
-        constexpr size_t capacity = 2048;
-        return std::make_unique<lock_bounded_queue<T>>(capacity);
+template <typename QueueType, size_t Capacity>
+struct queue_factory<QueueType, Capacity, std::enable_if_t<!has_capacity_v<QueueType>>> {
+    static const size_t capacity_ = Capacity;
+    static std::unique_ptr<QueueType> create() {
+        return std::make_unique<QueueType>();
     }
 };
 
 template <typename T>
 class lock_queue_ut : public ::testing::Test {
    protected:
+    using queue_type = T;
+    using element_type = typename queue_type::value_type;
+
+   protected:
     void SetUp() override {
-        queue_ = queue_fectory<T>::create();
+        queue_ = queue_factory<queue_type>::create();
+        capacity_ = queue_factory<queue_type>::capacity_;
     }
-    std::unique_ptr<T> queue_;
+    std::unique_ptr<queue_type> queue_;
+    size_t capacity_{0};
 };
 
 TYPED_TEST_SUITE(lock_queue_ut, queue_impls);
 
 TYPED_TEST(lock_queue_ut, init_empty) {
-    EXPECT_EQ(this->queue_->size(), 0);
-    EXPECT_EQ(this->queue_->empty(), true);
+    using queue_type = typename TestFixture::queue_type;
+
+    queue_type& queue = *(this->queue_);
+
+    EXPECT_EQ(queue.size(), 0);
+    EXPECT_EQ(queue.empty(), true);
 }
 
-// TYPED_TEST(lock_queue_ut, enqueue_lvalue) {
-//     uint32_t in = 42;
-//     this->queue_->enqueue(in);
-//     EXPECT_EQ(this->queue_.size(), 1);
-//     EXPECT_FALSE(this->queue_.empty());
-// }
+TYPED_TEST(lock_queue_ut, enqueue_lvalue) {
+    using queue_type = typename TestFixture::queue_type;
+    using element_type = typename TestFixture::element_type;
+
+    queue_type& queue = *(this->queue_);
+
+    element_type in{42};
+    EXPECT_TRUE(queue.enqueue(in));
+    EXPECT_EQ(queue.size(), 1);
+    EXPECT_FALSE(queue.empty());
+}
+
+TYPED_TEST(lock_queue_ut, enqueue_rvalue) {
+    using queue_type = typename TestFixture::queue_type;
+    using element_type = typename TestFixture::element_type;
+
+    queue_type& queue = *(this->queue_);
+
+    element_type in{42};
+    EXPECT_TRUE(queue.enqueue(std::move(in)));
+    EXPECT_EQ(queue.size(), 1);
+    EXPECT_FALSE(queue.empty());
+}
+
+TYPED_TEST(lock_queue_ut, enqueue_with_lambda) {
+    using queue_type = typename TestFixture::queue_type;
+    using element_type = typename TestFixture::element_type;
+
+    queue_type& queue = *(this->queue_);
+
+    auto f = [](element_type& dest) { dest = 42; };
+    EXPECT_TRUE(queue.enqueue_with(f));
+    EXPECT_EQ(queue.size(), 1);
+    EXPECT_FALSE(queue.empty());
+}
+
+TYPED_TEST(lock_queue_ut, dequeue_lvalue) {
+    using queue_type = typename TestFixture::queue_type;
+    using element_type = typename TestFixture::element_type;
+
+    queue_type& queue = *(this->queue_);
+
+    element_type in{42};
+    EXPECT_TRUE(queue.enqueue(in));
+
+    element_type out;
+    EXPECT_TRUE(queue.dequeue(out));
+    EXPECT_EQ(out, in);
+    EXPECT_EQ(queue.size(), 0);
+}
+
+TYPED_TEST(lock_queue_ut, dequeue_rvalue) {
+    using queue_type = typename TestFixture::queue_type;
+    using element_type = typename TestFixture::element_type;
+
+    queue_type& queue = *(this->queue_);
+
+    element_type in{42};
+    EXPECT_TRUE(queue.enqueue(std::move(in)));
+
+    element_type out;
+    EXPECT_TRUE(queue.dequeue(out));
+    EXPECT_EQ(out, in);
+    EXPECT_EQ(queue.size(), 0);
+}
+
+TYPED_TEST(lock_queue_ut, dequeue_with_lambda) {
+    using queue_type = typename TestFixture::queue_type;
+    using element_type = typename TestFixture::element_type;
+
+    queue_type& queue = *(this->queue_);
+
+    element_type in{42};
+    auto fin = [&in](element_type& dest) { dest = in; };
+    EXPECT_TRUE(queue.enqueue_with(fin));
+
+    element_type out;
+    auto fout = [&out](element_type& dest) { out = dest; };
+    EXPECT_TRUE(queue.dequeue_with(fout));
+    EXPECT_EQ(out, in);
+}
+
+TYPED_TEST(lock_queue_ut, dequeue_optional) {
+    using queue_type = typename TestFixture::queue_type;
+    using element_type = typename TestFixture::element_type;
+
+    queue_type& queue = *(this->queue_);
+
+    element_type in{42};
+    EXPECT_TRUE(queue.enqueue(in));
+
+    std::optional<element_type> out = queue.dequeue();
+    EXPECT_TRUE(out.has_value());
+    EXPECT_EQ(out.value(), in);
+}
+
+TYPED_TEST(lock_queue_ut, is_closed) {
+    using queue_type = typename TestFixture::queue_type;
+
+    queue_type& queue = *(this->queue_);
+
+    EXPECT_TRUE(queue.enqueue(42));
+    EXPECT_FALSE(queue.is_closed());
+    EXPECT_EQ(queue.size(), 1);
+
+    queue.close();
+    EXPECT_TRUE(queue.is_closed());
+    EXPECT_EQ(queue.size(), 1);
+}
+
+TYPED_TEST(lock_queue_ut, enqueue_closed) {
+    using queue_type = typename TestFixture::queue_type;
+
+    queue_type& queue = *(this->queue_);
+
+    queue.close();
+    EXPECT_FALSE(queue.enqueue(42));
+    EXPECT_TRUE(queue.is_closed());
+    EXPECT_EQ(queue.size(), 0);
+}
+
+TYPED_TEST(lock_queue_ut, dequeue_closed) {
+    using queue_type = typename TestFixture::queue_type;
+    using element_type = typename TestFixture::element_type;
+
+    queue_type& queue = *(this->queue_);
+
+    element_type in{42};
+    EXPECT_TRUE(queue.enqueue(in));
+    queue.close();
+
+    element_type out;
+    EXPECT_TRUE(queue.dequeue(out));
+    EXPECT_EQ(out, in);
+}
+
+TYPED_TEST(lock_queue_ut, clear) {
+    using queue_type = typename TestFixture::queue_type;
+    using element_type = typename TestFixture::element_type;
+
+    queue_type& queue = *(this->queue_);
+    EXPECT_TRUE(queue.enqueue(1));
+    EXPECT_TRUE(queue.enqueue(2));
+    ASSERT_EQ(queue.size(), 2);
+
+    queue.clear();
+    EXPECT_EQ(queue.size(), 0);
+    EXPECT_TRUE(queue.empty());
+
+    EXPECT_TRUE(queue.enqueue(3));
+    EXPECT_EQ(queue.size(), 1);
+
+    std::optional<element_type> out = queue.dequeue();
+    EXPECT_TRUE(out.has_value());
+    EXPECT_EQ(out.value(), 3);
+}
+
+TYPED_TEST(lock_queue_ut, single_in_sigle_out) {
+    using queue_type = typename TestFixture::queue_type;
+    using element_type = typename TestFixture::element_type;
+
+    queue_type& queue = *(this->queue_);
+
+    const size_t ITEM_NUM = TestFixture::capacity_;
+    for (uint32_t i = 0; i < ITEM_NUM; i++) {
+        EXPECT_TRUE(queue.enqueue(static_cast<element_type>(i)));
+    }
+    EXPECT_EQ(queue.size(), ITEM_NUM);
+    EXPECT_FALSE(queue.empty());
+
+    for (uint32_t i = 0; i < ITEM_NUM; i++) {
+        element_type out;
+        EXPECT_TRUE(queue.dequeue(out));
+        EXPECT_EQ(out, static_cast<element_type>(i));
+    }
+    EXPECT_EQ(queue.size(), 0);
+    EXPECT_TRUE(queue.empty());
+}
+
+TYPED_TEST(lock_queue_ut, single_in_sigle_out_with_lambda) {
+    using queue_type = typename TestFixture::queue_type;
+    using element_type = typename TestFixture::element_type;
+
+    queue_type& queue = *(this->queue_);
+
+    const size_t ITEM_NUM = TestFixture::capacity_;
+    for (uint32_t i = 0; i < ITEM_NUM; i++) {
+        EXPECT_TRUE(queue.enqueue(static_cast<element_type>(i)));
+    }
+    EXPECT_EQ(queue.size(), ITEM_NUM);
+    EXPECT_FALSE(queue.empty());
+
+    for (uint32_t i = 0; i < ITEM_NUM; i++) {
+        element_type out;
+        EXPECT_TRUE(queue.dequeue(out));
+        EXPECT_EQ(out, static_cast<element_type>(i));
+    }
+    EXPECT_EQ(queue.size(), 0);
+    EXPECT_TRUE(queue.empty());
+}
 
 TEST(LockQueueUt, InitEmpty) {
     lock_queue<uint32_t> lq;
@@ -83,6 +297,14 @@ TEST(LockQueueUt, EnqueueLvalue) {
     EXPECT_EQ(lq.empty(), false);
 }
 
+TEST(LockQueueUt, EnqueueWithLambda) {
+    lock_queue<uint32_t> lq;
+    auto f = [](uint32_t& dest) { dest = 42; };
+    lq.enqueue_with(f);
+    EXPECT_EQ(lq.size(), 1);
+    EXPECT_EQ(lq.empty(), false);
+}
+
 TEST(LockQueueUt, DequeueRvalue) {
     lock_queue<uint32_t> lq;
     uint32_t in = 10;
@@ -99,6 +321,18 @@ TEST(LockQueueUt, DequeueLvalue) {
     std::optional<uint32_t> out = lq.dequeue();
     EXPECT_TRUE(out.has_value());
     EXPECT_EQ(out.value(), in);
+}
+
+TEST(LockQueueUt, DequeueWithLambda) {
+    lock_queue<uint32_t> lq;
+    uint32_t in = 42;
+    auto fin = [&in](uint32_t& dest) { dest = in; };
+    lq.enqueue_with(fin);
+
+    uint32_t out;
+    auto fout = [&out](uint32_t& dest) { out = dest; };
+    EXPECT_TRUE(lq.dequeue_with(fout));
+    EXPECT_EQ(out, in);
 }
 
 TEST(LockQueueUt, EnqueueUncopyable) {

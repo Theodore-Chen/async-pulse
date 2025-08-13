@@ -33,28 +33,24 @@ class lock_queue {
 
     template <typename Func>
     bool enqueue_with(Func&& f) {
-        {
-            std::lock_guard<std::mutex> lock(mtx_);
-            if (closed_) {
-                return false;
-            }
-            std::forward<Func>(f)();
-        }
-        cond_.notify_one();
-        return true;
+        return enqueue_impl([&f](std::queue<value_type>& queue) {
+            value_type val;
+            f(val);
+            queue.push(std::move(val));
+        });
     }
 
     bool enqueue(const value_type& val) {
-        return enqueue_with([this, &val]() { queue_.push(val); });
+        return enqueue_impl([&val](std::queue<value_type>& queue) { queue.push(val); });
     }
 
     bool enqueue(value_type&& val) {
-        return enqueue_with([this, &val]() { queue_.push(std::move(val)); });
+        return enqueue_impl([&val](std::queue<value_type>& queue) { queue.push(std::move(val)); });
     }
 
     template <typename... Args>
     bool emplace(Args&&... args) {
-        return enqueue_with([this, &args...]() { queue_.emplace(std::forward<Args>(args)...); });
+        return enqueue_impl([&args...](std::queue<value_type>& queue) { queue.emplace(std::forward<Args>(args)...); });
     }
 
     template <typename Func>
@@ -66,18 +62,18 @@ class lock_queue {
             return false;
         }
 
-        std::forward<Func>(f)(std::move(queue_.front()));
+        std::forward<Func>(f)(queue_.front());
         queue_.pop();
         return true;
     }
 
     bool dequeue(value_type& val) {
-        return dequeue_with([&val](value_type&& item) { val = std::move(item); });
+        return dequeue_with([&val](value_type& item) { val = std::move(item); });
     }
 
     std::optional<value_type> dequeue() {
         std::optional<value_type> result;
-        dequeue_with([&result](value_type&& val) { result.emplace(std::move(val)); });
+        dequeue_with([&result](value_type& val) { result.emplace(std::move(val)); });
         return result;
     }
 
@@ -101,6 +97,21 @@ class lock_queue {
         std::lock_guard<std::mutex> lock(mtx_);
         std::queue<value_type> empty_queue;
         queue_.swap(empty_queue);
+    }
+
+   private:
+    template <typename Operation>
+    bool enqueue_impl(Operation&& op) {
+        {
+            std::lock_guard<std::mutex> lock(mtx_);
+            if (closed_) {
+                return false;
+            }
+
+            std::forward<Operation>(op)(queue_);
+        }
+        cond_.notify_one();
+        return true;
     }
 
    private:

@@ -1,12 +1,10 @@
 #pragma once
 
 #include <condition_variable>
-#include <cstdint>
 #include <mutex>
 #include <optional>
 #include <queue>
-
-enum class queue_status : uint32_t { SUCCESS, FULL, CLOSED };
+#include <thread>
 
 template <typename T>
 class lock_bounded_queue {
@@ -25,47 +23,67 @@ class lock_bounded_queue {
     lock_bounded_queue& operator=(const lock_bounded_queue&) = delete;
     lock_bounded_queue& operator=(lock_bounded_queue&&) = delete;
 
-    template <typename U>
-    queue_status try_enqueue(U&& u) {
-        std::lock_guard<std::mutex> lock(mtx_);
-        if (closed_) {
-            return queue_status::CLOSED;
-        } else if (queue_.size() >= capacity_) {
-            return queue_status::FULL;
-        }
-
-        queue_.push(std::forward<U>(u));
-        cv_.notify_one();
-        return queue_status::SUCCESS;
+    template <typename Func>
+    bool try_enqueue_with(Func&& f) {
+        return try_enqueue_impl([&f](std::queue<value_type>& queue) {
+            value_type val;
+            f(val);
+            queue.push(std::move(val));
+        });
     }
 
-    // bool enqueue(const value_type& val) {
-    //     std::lock_guard<std::mutex> lock(mtx_);
-    // }
+    bool try_enqueue(const value_type& val) {
+        return try_enqueue_impl([&val](std::queue<value_type>& queue) { queue.push(val); });
+    }
 
-    std::optional<T> dequeue() {
+    bool try_enqueue(value_type&& val) {
+        return try_enqueue_impl([&val](std::queue<value_type>& queue) { queue.push(std::move(val)); });
+    }
+
+    template <typename Func>
+    bool enqueue_with(Func f) {
+        return enqueue_impl([&f](std::queue<value_type>& queue) {
+            value_type val;
+            f(val);
+            queue.push(std::move(val));
+        });
+    }
+
+    bool enqueue(const value_type& val) {
+        return enqueue_impl([&val](std::queue<value_type>& queue) { queue.push(val); });
+    }
+
+    bool enqueue(value_type&& val) {
+        return enqueue_impl([&val](std::queue<value_type>& queue) { queue.push(std::move(val)); });
+    }
+
+    template <typename... Args>
+    bool emplace(Args&&... args) {
+        return enqueue_impl([&args...](std::queue<value_type>& queue) { queue.emplace(std::forward<Args>(args)...); });
+    }
+
+    template <typename Func>
+    bool dequeue_with(Func&& f) {
         std::unique_lock<std::mutex> lock(mtx_);
         cv_.wait(lock, [this]() { return !queue_.empty() || closed_; });
 
         if (queue_.empty()) {
-            return std::nullopt;
+            return false;
         }
 
-        T t = std::move(queue_.front());
+        std::forward<Func>(f)(queue_.front());
         queue_.pop();
-        return t;
+        return true;
     }
 
-    std::optional<T> try_dequeue() {
-        std::lock_guard<std::mutex> lock(mtx_);
+    bool dequeue(value_type& val) {
+        return dequeue_with([&val](value_type& item) { val = std::move(item); });
+    }
 
-        if (queue_.empty() || closed_) {
-            return std::nullopt;
-        }
-
-        T t = std::move(queue_.front());
-        queue_.pop();
-        return t;
+    std::optional<value_type> dequeue() {
+        std::optional<value_type> result;
+        dequeue_with([&result](value_type& item) { result.emplace(std::move(item)); });
+        return result;
     }
 
     void close() {
@@ -86,7 +104,7 @@ class lock_bounded_queue {
 
     void clear() {
         std::lock_guard<std::mutex> lock(mtx_);
-        std::queue<T> empty_queue;
+        std::queue<value_type> empty_queue;
         queue_.swap(empty_queue);
     }
 
@@ -101,7 +119,43 @@ class lock_bounded_queue {
     }
 
     size_t capacity() {
-        return capacity;
+        return capacity_;
+    }
+
+   private:
+    template <typename Operation>
+    bool enqueue_impl(Operation&& op) {
+        {
+            std::unique_lock<std::mutex> lock(mtx_);
+
+            while (queue_.size() >= capacity_ && !closed_) {
+                lock.unlock();
+                std::this_thread::yield();
+                lock.lock();
+            }
+
+            if (closed_) {
+                return false;
+            }
+
+            std::forward<Operation>(op)(queue_);
+        }
+        cv_.notify_one();
+        return true;
+    }
+
+    template <typename Operation>
+    bool try_enqueue_impl(Operation&& op) {
+        {
+            std::lock_guard<std::mutex> lock(mtx_);
+            if (closed_ || queue_.size() >= capacity_) {
+                return false;
+            }
+
+            std::forward<Operation>(op)(queue_);
+        }
+        cv_.notify_one();
+        return true;
     }
 
    private:
