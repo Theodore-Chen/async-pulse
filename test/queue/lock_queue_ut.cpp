@@ -8,7 +8,7 @@
 #include "queue_factory.h"
 
 template <typename T>
-class lock_queue_ut : public ::testing::Test {
+class queue_ut : public ::testing::Test {
    protected:
     using queue_type = T;
     using element_type = typename queue_type::value_type;
@@ -25,9 +25,9 @@ class lock_queue_ut : public ::testing::Test {
 
 using queue_impls = ::testing::Types<lock_queue<uint32_t>, lock_bounded_queue<uint32_t>>;
 
-TYPED_TEST_SUITE(lock_queue_ut, queue_impls);
+TYPED_TEST_SUITE(queue_ut, queue_impls);
 
-TYPED_TEST(lock_queue_ut, init_empty) {
+TYPED_TEST(queue_ut, init_empty) {
     using queue_type = typename TestFixture::queue_type;
 
     queue_type& queue = *(this->queue_);
@@ -36,7 +36,7 @@ TYPED_TEST(lock_queue_ut, init_empty) {
     EXPECT_EQ(queue.empty(), true);
 }
 
-TYPED_TEST(lock_queue_ut, enqueue_lvalue) {
+TYPED_TEST(queue_ut, enqueue_lvalue) {
     using queue_type = typename TestFixture::queue_type;
     using element_type = typename TestFixture::element_type;
 
@@ -48,7 +48,7 @@ TYPED_TEST(lock_queue_ut, enqueue_lvalue) {
     EXPECT_FALSE(queue.empty());
 }
 
-TYPED_TEST(lock_queue_ut, enqueue_rvalue) {
+TYPED_TEST(queue_ut, enqueue_rvalue) {
     using queue_type = typename TestFixture::queue_type;
     using element_type = typename TestFixture::element_type;
 
@@ -60,7 +60,7 @@ TYPED_TEST(lock_queue_ut, enqueue_rvalue) {
     EXPECT_FALSE(queue.empty());
 }
 
-TYPED_TEST(lock_queue_ut, enqueue_with_lambda) {
+TYPED_TEST(queue_ut, enqueue_with_lambda) {
     using queue_type = typename TestFixture::queue_type;
     using element_type = typename TestFixture::element_type;
 
@@ -72,7 +72,7 @@ TYPED_TEST(lock_queue_ut, enqueue_with_lambda) {
     EXPECT_FALSE(queue.empty());
 }
 
-TYPED_TEST(lock_queue_ut, dequeue_lvalue) {
+TYPED_TEST(queue_ut, dequeue_lvalue) {
     using queue_type = typename TestFixture::queue_type;
     using element_type = typename TestFixture::element_type;
 
@@ -87,7 +87,7 @@ TYPED_TEST(lock_queue_ut, dequeue_lvalue) {
     EXPECT_EQ(queue.size(), 0);
 }
 
-TYPED_TEST(lock_queue_ut, dequeue_rvalue) {
+TYPED_TEST(queue_ut, dequeue_rvalue) {
     using queue_type = typename TestFixture::queue_type;
     using element_type = typename TestFixture::element_type;
 
@@ -102,7 +102,7 @@ TYPED_TEST(lock_queue_ut, dequeue_rvalue) {
     EXPECT_EQ(queue.size(), 0);
 }
 
-TYPED_TEST(lock_queue_ut, dequeue_with_lambda) {
+TYPED_TEST(queue_ut, dequeue_with_lambda) {
     using queue_type = typename TestFixture::queue_type;
     using element_type = typename TestFixture::element_type;
 
@@ -118,7 +118,7 @@ TYPED_TEST(lock_queue_ut, dequeue_with_lambda) {
     EXPECT_EQ(out, in);
 }
 
-TYPED_TEST(lock_queue_ut, dequeue_optional) {
+TYPED_TEST(queue_ut, dequeue_optional) {
     using queue_type = typename TestFixture::queue_type;
     using element_type = typename TestFixture::element_type;
 
@@ -132,7 +132,7 @@ TYPED_TEST(lock_queue_ut, dequeue_optional) {
     EXPECT_EQ(out.value(), in);
 }
 
-TYPED_TEST(lock_queue_ut, is_closed) {
+TYPED_TEST(queue_ut, is_closed) {
     using queue_type = typename TestFixture::queue_type;
 
     queue_type& queue = *(this->queue_);
@@ -146,7 +146,7 @@ TYPED_TEST(lock_queue_ut, is_closed) {
     EXPECT_EQ(queue.size(), 1);
 }
 
-TYPED_TEST(lock_queue_ut, enqueue_closed) {
+TYPED_TEST(queue_ut, enqueue_closed) {
     using queue_type = typename TestFixture::queue_type;
 
     queue_type& queue = *(this->queue_);
@@ -157,7 +157,7 @@ TYPED_TEST(lock_queue_ut, enqueue_closed) {
     EXPECT_EQ(queue.size(), 0);
 }
 
-TYPED_TEST(lock_queue_ut, dequeue_closed) {
+TYPED_TEST(queue_ut, dequeue_closed) {
     using queue_type = typename TestFixture::queue_type;
     using element_type = typename TestFixture::element_type;
 
@@ -172,7 +172,7 @@ TYPED_TEST(lock_queue_ut, dequeue_closed) {
     EXPECT_EQ(out, in);
 }
 
-TYPED_TEST(lock_queue_ut, clear) {
+TYPED_TEST(queue_ut, clear) {
     using queue_type = typename TestFixture::queue_type;
     using element_type = typename TestFixture::element_type;
 
@@ -193,7 +193,7 @@ TYPED_TEST(lock_queue_ut, clear) {
     EXPECT_EQ(out.value(), 3);
 }
 
-TYPED_TEST(lock_queue_ut, sequential_in_sequential_out) {
+TYPED_TEST(queue_ut, sequential_in_sequential_out) {
     using queue_type = typename TestFixture::queue_type;
     using element_type = typename TestFixture::element_type;
 
@@ -215,7 +215,7 @@ TYPED_TEST(lock_queue_ut, sequential_in_sequential_out) {
     EXPECT_TRUE(queue.empty());
 }
 
-TYPED_TEST(lock_queue_ut, sequential_in_sequential_out_with_lambda) {
+TYPED_TEST(queue_ut, sequential_in_sequential_out_with_lambda) {
     using queue_type = typename TestFixture::queue_type;
     using element_type = typename TestFixture::element_type;
 
@@ -293,37 +293,37 @@ void multi_in_multi_out_test(QueueType& queue, size_t item_num, size_t producer_
     EXPECT_EQ(produce_cnt, consume_cnt);
 }
 
-TYPED_TEST(lock_queue_ut, multi_in_multi_out) {
+TYPED_TEST(queue_ut, multi_in_multi_out) {
     using queue_type = typename TestFixture::queue_type;
     queue_type& queue = *(this->queue_);
 
-    const size_t PRODUCER_NUM = 10;
-    const size_t CONSUMER_NUM = 10;
+    const size_t PRODUCER_NUM = 16;
+    const size_t CONSUMER_NUM = 16;
 
     multi_in_multi_out_test(queue, TestFixture::capacity_, PRODUCER_NUM, CONSUMER_NUM);
 }
 
-TYPED_TEST(lock_queue_ut, single_in_multi_out) {
+TYPED_TEST(queue_ut, single_in_multi_out) {
     using queue_type = typename TestFixture::queue_type;
     queue_type& queue = *(this->queue_);
 
     const size_t PRODUCER_NUM = 1;
-    const size_t CONSUMER_NUM = 10;
+    const size_t CONSUMER_NUM = 16;
 
     multi_in_multi_out_test(queue, TestFixture::capacity_, PRODUCER_NUM, CONSUMER_NUM);
 }
 
-TYPED_TEST(lock_queue_ut, multi_in_single_out) {
+TYPED_TEST(queue_ut, multi_in_single_out) {
     using queue_type = typename TestFixture::queue_type;
     queue_type& queue = *(this->queue_);
 
-    const size_t PRODUCER_NUM = 10;
+    const size_t PRODUCER_NUM = 16;
     const size_t CONSUMER_NUM = 1;
 
     multi_in_multi_out_test(queue, TestFixture::capacity_, PRODUCER_NUM, CONSUMER_NUM);
 }
 
-TYPED_TEST(lock_queue_ut, single_in_single_out) {
+TYPED_TEST(queue_ut, single_in_single_out) {
     using queue_type = typename TestFixture::queue_type;
     queue_type& queue = *(this->queue_);
 
