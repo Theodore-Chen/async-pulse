@@ -4,7 +4,6 @@
 #include <mutex>
 #include <optional>
 #include <queue>
-#include <thread>
 
 template <typename T>
 class lock_bounded_queue {
@@ -12,10 +11,9 @@ class lock_bounded_queue {
     using value_type = T;
 
    public:
-    lock_bounded_queue(size_t capacity = 0) : capacity_(capacity) {}
+    explicit lock_bounded_queue(size_t capacity = 0) : capacity_(capacity) {}
     ~lock_bounded_queue() {
         close();
-        clear();
     }
 
     lock_bounded_queue(const lock_bounded_queue&) = delete;
@@ -41,7 +39,7 @@ class lock_bounded_queue {
     }
 
     template <typename Func>
-    bool enqueue_with(Func f) {
+    bool enqueue_with(Func&& f) {
         return enqueue_impl([&f](std::queue<value_type>& queue) {
             value_type val;
             f(val);
@@ -64,15 +62,18 @@ class lock_bounded_queue {
 
     template <typename Func>
     bool dequeue_with(Func&& f) {
-        std::unique_lock<std::mutex> lock(mtx_);
-        cv_.wait(lock, [this]() { return !queue_.empty() || closed_; });
+        {
+            std::unique_lock<std::mutex> lock(mtx_);
+            cv_.wait(lock, [this]() { return !queue_.empty() || closed_; });
 
-        if (queue_.empty()) {
-            return false;
+            if (queue_.empty()) {
+                return false;
+            }
+
+            std::forward<Func>(f)(queue_.front());
+            queue_.pop();
         }
-
-        std::forward<Func>(f)(queue_.front());
-        queue_.pop();
+        cv_.notify_one();
         return true;
     }
 
@@ -82,8 +83,8 @@ class lock_bounded_queue {
 
     std::optional<value_type> dequeue() {
         std::optional<value_type> result;
-        dequeue_with([&result](value_type& item) { result.emplace(std::move(item)); });
-        return result;
+        bool success = dequeue_with([&result](value_type& item) { result.emplace(std::move(item)); });
+        return success ? result : std::nullopt;
     }
 
     void close() {
@@ -118,8 +119,13 @@ class lock_bounded_queue {
         return queue_.empty();
     }
 
-    size_t capacity() {
+    size_t capacity() const {
         return capacity_;
+    }
+
+    bool is_full() {
+        std::lock_guard<std::mutex> lock(mtx_);
+        return (capacity_ > 0) && (queue_.size() >= capacity_);
     }
 
    private:
@@ -128,11 +134,7 @@ class lock_bounded_queue {
         {
             std::unique_lock<std::mutex> lock(mtx_);
 
-            while (queue_.size() >= capacity_ && !closed_) {
-                lock.unlock();
-                std::this_thread::yield();
-                lock.lock();
-            }
+            cv_.wait(lock, [this]() { return queue_.size() < capacity_ || closed_; });
 
             if (closed_) {
                 return false;

@@ -3,7 +3,6 @@ set(CMAKE_CXX_SAVE_PREPROCESSED_FILES ON)
 add_executable(queue_ut)
 
 target_sources(queue_ut PRIVATE
-    # lock_free_queue_ut.cpp
     lock_queue_ut.cpp
 )
 
@@ -17,4 +16,3 @@ target_link_libraries(queue_ut PRIVATE
 )
 
 gtest_discover_tests(queue_ut)
-

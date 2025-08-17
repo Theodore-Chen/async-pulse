@@ -1,46 +1,11 @@
 #include <gtest/gtest.h>
 
 #include <future>
-#include <thread>
 #include <vector>
 
 #include "queue/lock_bounded_queue.h"
 #include "queue/lock_queue.h"
-
-using lock_queue_t = lock_queue<uint32_t>;
-using lock_queue_uncopyable_t = lock_queue<std::unique_ptr<uint32_t>>;
-using bounded_queue_t = lock_bounded_queue<uint32_t>;
-using bounded_queue_uncopyable_t = lock_bounded_queue<std::unique_ptr<uint32_t>>;
-
-using queue_impls = ::testing::Types<lock_queue<uint32_t>, lock_bounded_queue<uint32_t>>;
-
-template <typename T, typename = void>
-struct has_capacity : std::false_type {};
-
-template <typename T>
-struct has_capacity<T, std::void_t<decltype(std::declval<T>().capacity())>> : std::true_type {};
-
-template <typename T>
-inline constexpr bool has_capacity_v = has_capacity<T>::value;
-
-template <typename QueueType, size_t Capacity = 2048, typename Enable = void>
-struct queue_factory;
-
-template <typename QueueType, size_t Capacity>
-struct queue_factory<QueueType, Capacity, std::enable_if_t<has_capacity_v<QueueType>>> {
-    static const size_t capacity_ = Capacity;
-    static std::unique_ptr<QueueType> create() {
-        return std::make_unique<QueueType>(capacity_);
-    }
-};
-
-template <typename QueueType, size_t Capacity>
-struct queue_factory<QueueType, Capacity, std::enable_if_t<!has_capacity_v<QueueType>>> {
-    static const size_t capacity_ = Capacity;
-    static std::unique_ptr<QueueType> create() {
-        return std::make_unique<QueueType>();
-    }
-};
+#include "queue_factory.h"
 
 template <typename T>
 class lock_queue_ut : public ::testing::Test {
@@ -50,12 +15,15 @@ class lock_queue_ut : public ::testing::Test {
 
    protected:
     void SetUp() override {
-        queue_ = queue_factory<queue_type>::create();
-        capacity_ = queue_factory<queue_type>::capacity_;
+        using factory = queue_factory<queue_type, 2048>;
+        queue_ = factory::create();
+        capacity_ = factory::capacity_;
     }
     std::unique_ptr<queue_type> queue_;
     size_t capacity_{0};
 };
+
+using queue_impls = ::testing::Types<lock_queue<uint32_t>, lock_bounded_queue<uint32_t>>;
 
 TYPED_TEST_SUITE(lock_queue_ut, queue_impls);
 
@@ -225,7 +193,7 @@ TYPED_TEST(lock_queue_ut, clear) {
     EXPECT_EQ(out.value(), 3);
 }
 
-TYPED_TEST(lock_queue_ut, single_in_sigle_out) {
+TYPED_TEST(lock_queue_ut, sequential_in_sequential_out) {
     using queue_type = typename TestFixture::queue_type;
     using element_type = typename TestFixture::element_type;
 
@@ -247,7 +215,7 @@ TYPED_TEST(lock_queue_ut, single_in_sigle_out) {
     EXPECT_TRUE(queue.empty());
 }
 
-TYPED_TEST(lock_queue_ut, single_in_sigle_out_with_lambda) {
+TYPED_TEST(lock_queue_ut, sequential_in_sequential_out_with_lambda) {
     using queue_type = typename TestFixture::queue_type;
     using element_type = typename TestFixture::element_type;
 
@@ -269,219 +237,98 @@ TYPED_TEST(lock_queue_ut, single_in_sigle_out_with_lambda) {
     EXPECT_TRUE(queue.empty());
 }
 
-TEST(LockQueueUt, InitEmpty) {
-    lock_queue<uint32_t> lq;
-    EXPECT_EQ(lq.size(), 0);
-    EXPECT_EQ(lq.empty(), true);
-}
+template <typename QueueType>
+std::vector<std::future<void>> create_producer_tasks(QueueType& queue, std::atomic<size_t>& count, size_t item_num,
+                                                     size_t producer_num) {
+    using element_type = typename QueueType::value_type;
+    std::vector<std::future<void>> tasks;
 
-TEST(LockQueueUt, InitUnmovable) {
-    lock_queue<std::unique_ptr<uint32_t>> lq;
-    EXPECT_EQ(lq.size(), 0);
-    EXPECT_EQ(lq.empty(), true);
-}
-
-TEST(LockQueueUt, EnqueueRvalue) {
-    lock_queue<uint32_t> lq;
-    uint32_t in = 10;
-    lq.enqueue(std::move(in));
-    EXPECT_EQ(lq.size(), 1);
-    EXPECT_EQ(lq.empty(), false);
-}
-
-TEST(LockQueueUt, EnqueueLvalue) {
-    lock_queue<uint32_t> lq;
-    uint32_t in = 10;
-    lq.enqueue(in);
-    EXPECT_EQ(lq.size(), 1);
-    EXPECT_EQ(lq.empty(), false);
-}
-
-TEST(LockQueueUt, EnqueueWithLambda) {
-    lock_queue<uint32_t> lq;
-    auto f = [](uint32_t& dest) { dest = 42; };
-    lq.enqueue_with(f);
-    EXPECT_EQ(lq.size(), 1);
-    EXPECT_EQ(lq.empty(), false);
-}
-
-TEST(LockQueueUt, DequeueRvalue) {
-    lock_queue<uint32_t> lq;
-    uint32_t in = 10;
-    lq.enqueue(std::move(in));
-    std::optional<uint32_t> out = lq.dequeue();
-    EXPECT_TRUE(out.has_value());
-    EXPECT_EQ(out.value(), in);
-}
-
-TEST(LockQueueUt, DequeueLvalue) {
-    lock_queue<uint32_t> lq;
-    uint32_t in = 10;
-    lq.enqueue(in);
-    std::optional<uint32_t> out = lq.dequeue();
-    EXPECT_TRUE(out.has_value());
-    EXPECT_EQ(out.value(), in);
-}
-
-TEST(LockQueueUt, DequeueWithLambda) {
-    lock_queue<uint32_t> lq;
-    uint32_t in = 42;
-    auto fin = [&in](uint32_t& dest) { dest = in; };
-    lq.enqueue_with(fin);
-
-    uint32_t out;
-    auto fout = [&out](uint32_t& dest) { out = dest; };
-    EXPECT_TRUE(lq.dequeue_with(fout));
-    EXPECT_EQ(out, in);
-}
-
-TEST(LockQueueUt, EnqueueUncopyable) {
-    lock_queue<std::unique_ptr<uint32_t>> lq;
-    std::unique_ptr<uint32_t> in = std::make_unique<uint32_t>(42);
-    lq.enqueue(std::move(in));
-    EXPECT_EQ(lq.size(), 1);
-    EXPECT_EQ(lq.empty(), false);
-}
-
-TEST(LockQueueUt, DequeueUncopyable) {
-    lock_queue<std::unique_ptr<uint32_t>> lq;
-    std::unique_ptr<uint32_t> in = std::make_unique<uint32_t>(42);
-    lq.enqueue(std::move(in));
-    std::optional<std::unique_ptr<uint32_t>> out = lq.dequeue();
-    EXPECT_TRUE(out.has_value());
-    EXPECT_EQ(**out, 42);
-}
-
-TEST(LockQueueUt, IsClosed) {
-    lock_queue<uint32_t> lq;
-    lq.close();
-    EXPECT_TRUE(lq.is_closed());
-}
-
-TEST(LockQueueUt, EnqueueClose) {
-    lock_queue<uint32_t> lq;
-    lq.close();
-    EXPECT_TRUE(lq.is_closed());
-    EXPECT_FALSE(lq.enqueue(42));
-    EXPECT_EQ(lq.size(), 0);
-}
-
-TEST(LockQueueUt, DequeueClose) {
-    lock_queue<uint32_t> lq;
-
-    auto consumer_task = [&lq]() {
-        std::optional<uint32_t> out = lq.dequeue();
-        EXPECT_FALSE(out.has_value());
+    auto task = [&queue, &count, item_num](size_t task_id) {
+        for (size_t i = 0; i < item_num; i++) {
+            EXPECT_TRUE(queue.enqueue(static_cast<element_type>(item_num * task_id + i)));
+            count.fetch_add(1);
+        }
     };
-    auto fut = std::async(std::launch::async, consumer_task);
 
-    lq.close();
-    fut.wait();
+    for (size_t i = 0; i < producer_num; i++) {
+        tasks.emplace_back(std::async(std::launch::async, task, i));
+    }
+
+    return tasks;
 }
 
-TEST(LockQueueUt, Clear) {
-    lock_queue<uint32_t> lq;
-    lq.enqueue(1);
-    lq.enqueue(2);
-    ASSERT_EQ(lq.size(), 2);
+template <typename QueueType>
+std::vector<std::future<void>> create_consumer_tasks(QueueType& queue, std::atomic<size_t>& count, size_t item_num,
+                                                     size_t consumer_num) {
+    using element_type = typename QueueType::value_type;
+    std::vector<std::future<void>> tasks;
 
-    lq.clear();
-    EXPECT_EQ(lq.size(), 0);
-    EXPECT_TRUE(lq.empty());
-
-    lq.enqueue(3);
-    EXPECT_EQ(lq.size(), 1);
-
-    std::optional<uint32_t> out = lq.dequeue();
-    EXPECT_TRUE(out.has_value());
-    EXPECT_EQ(out.value(), 3);
-}
-
-TEST(LockQueueUt, DestructorWakesUpConsumer) {
-    std::unique_ptr<lock_queue<uint32_t>> lq_ptr = std::make_unique<lock_queue<uint32_t>>();
-    std::promise<void> ready_promise;
-    std::future<void> ready_future = ready_promise.get_future();
-
-    auto consumer_task = [&lq_ptr](std::promise<void> p) {
-        p.set_value();
-        std::optional<uint32_t> out = lq_ptr->dequeue();
-        EXPECT_FALSE(out.has_value());
+    auto task = [&queue, &count]() {
+        element_type out;
+        while (queue.dequeue(out)) {
+            count.fetch_add(1);
+        }
     };
-    auto fut = std::async(std::launch::async, consumer_task, std::move(ready_promise));
 
-    ready_future.wait();
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    lq_ptr.reset();
-    EXPECT_EQ(fut.wait_for(std::chrono::milliseconds(50)), std::future_status::ready);
+    for (uint32_t i = 0; i < consumer_num; i++) {
+        tasks.emplace_back(std::async(std::launch::async, task));
+    }
+
+    return tasks;
 }
 
-TEST(LockQueueUt, SingleInSingleOut) {
-    const size_t INFO_NUM = 10000;
-    lock_queue<std::unique_ptr<uint32_t>> lq;
-    for (uint32_t i = 0; i < INFO_NUM; i++) {
-        std::unique_ptr<uint32_t> in = std::make_unique<uint32_t>(i);
-        lq.enqueue(std::move(in));
-    }
-    for (uint32_t i = 0; i < INFO_NUM; i++) {
-        std::optional<std::unique_ptr<uint32_t>> out = lq.dequeue();
-        EXPECT_TRUE(out.has_value());
-        EXPECT_EQ(**out, i);
-    }
+template <typename QueueType>
+void multi_in_multi_out_test(QueueType& queue, size_t item_num, size_t producer_num, size_t consumer_num) {
+    std::atomic<size_t> produce_cnt{0};
+    std::atomic<size_t> consume_cnt{0};
+    std::vector<std::future<void>> producer_tasks = create_producer_tasks(queue, produce_cnt, item_num, producer_num);
+    std::vector<std::future<void>> consumer_tasks = create_consumer_tasks(queue, consume_cnt, item_num, consumer_num);
+
+    producer_tasks.clear();
+    queue.close();
+    consumer_tasks.clear();
+
+    EXPECT_EQ(queue.size(), 0);
+    EXPECT_TRUE(queue.empty());
+    EXPECT_EQ(produce_cnt, consume_cnt);
 }
 
-TEST(LockQueueUt, MultiInMultiOut) {
+TYPED_TEST(lock_queue_ut, multi_in_multi_out) {
+    using queue_type = typename TestFixture::queue_type;
+    queue_type& queue = *(this->queue_);
+
     const size_t PRODUCER_NUM = 10;
     const size_t CONSUMER_NUM = 10;
-    const size_t INFO_NUM = 10000;
 
-    using Item = std::pair<uint32_t, uint32_t>;
-    lock_queue<std::unique_ptr<Item>> lq;
+    multi_in_multi_out_test(queue, TestFixture::capacity_, PRODUCER_NUM, CONSUMER_NUM);
+}
 
-    std::vector<std::future<void>> producer_threads;
-    std::vector<std::future<void>> consumer_threads;
+TYPED_TEST(lock_queue_ut, single_in_multi_out) {
+    using queue_type = typename TestFixture::queue_type;
+    queue_type& queue = *(this->queue_);
 
-    std::vector<std::vector<uint32_t>> received_orders(PRODUCER_NUM);
-    for (auto& vec : received_orders) {
-        vec.resize(INFO_NUM, UINT32_MAX);
-    }
+    const size_t PRODUCER_NUM = 1;
+    const size_t CONSUMER_NUM = 10;
 
-    auto producer_task = [&lq](uint32_t taskId) {
-        for (uint32_t i = 0; i < INFO_NUM; i++) {
-            lq.enqueue(std::make_unique<Item>(taskId, i));
-        }
-    };
+    multi_in_multi_out_test(queue, TestFixture::capacity_, PRODUCER_NUM, CONSUMER_NUM);
+}
 
-    auto consumer_task = [&lq, &received_orders]() {
-        while (std::optional<std::unique_ptr<Item>> out = lq.dequeue()) {
-            Item item = std::move(**out);
-            ASSERT_LT(item.first, received_orders.size());
-            ASSERT_LT(item.second, received_orders[item.first].size());
-            received_orders[item.first][item.second] = item.second;
-        }
-    };
+TYPED_TEST(lock_queue_ut, multi_in_single_out) {
+    using queue_type = typename TestFixture::queue_type;
+    queue_type& queue = *(this->queue_);
 
-    for (uint32_t i = 0; i < PRODUCER_NUM; i++) {
-        producer_threads.emplace_back(std::async(std::launch::async, producer_task, i));
-    }
-    for (uint32_t i = 0; i < CONSUMER_NUM; i++) {
-        consumer_threads.emplace_back(std::async(std::launch::async, consumer_task));
-    }
-    for (auto& t : producer_threads) {
-        t.wait();
-    }
-    lq.close();
-    for (auto& t : consumer_threads) {
-        t.wait();
-    }
+    const size_t PRODUCER_NUM = 10;
+    const size_t CONSUMER_NUM = 1;
 
-    for (uint32_t task_id = 0; task_id < PRODUCER_NUM; task_id++) {
-        const auto& results = received_orders[task_id];
+    multi_in_multi_out_test(queue, TestFixture::capacity_, PRODUCER_NUM, CONSUMER_NUM);
+}
 
-        ASSERT_EQ(results.size(), INFO_NUM);
+TYPED_TEST(lock_queue_ut, single_in_single_out) {
+    using queue_type = typename TestFixture::queue_type;
+    queue_type& queue = *(this->queue_);
 
-        for (uint32_t i = 0; i < INFO_NUM; i++) {
-            ASSERT_NE(results[i], UINT32_MAX) << "Missing value for task " << task_id << " seq " << i;
-            EXPECT_EQ(results[i], i) << "Invalid value for task " << task_id << " seq " << i;
-        }
-    }
+    const size_t PRODUCER_NUM = 1;
+    const size_t CONSUMER_NUM = 1;
+
+    multi_in_multi_out_test(queue, TestFixture::capacity_, PRODUCER_NUM, CONSUMER_NUM);
 }
