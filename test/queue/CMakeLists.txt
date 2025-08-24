@@ -3,7 +3,7 @@ set(CMAKE_CXX_SAVE_PREPROCESSED_FILES ON)
 add_executable(queue_ut)
 
 target_sources(queue_ut PRIVATE
-    lock_queue_ut.cpp
+    queue_ut.cpp
 )
 
 target_include_directories(queue_ut PUBLIC ${ROOT_DIR}/src)
