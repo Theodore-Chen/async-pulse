@@ -74,7 +74,7 @@ class lock_queue {
     std::optional<value_type> dequeue() {
         std::optional<value_type> result;
         auto f = [&result](value_type& val) { result.emplace(std::move(val)); };
-        return dequeue_with(f) ? result : std::nullopt;
+        return dequeue_with(f) ? std::move(result) : std::nullopt;
     }
 
     void close() {

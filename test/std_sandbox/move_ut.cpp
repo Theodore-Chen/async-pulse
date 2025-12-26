@@ -20,9 +20,15 @@ class Base {
         return *this;
     }
     ~Base() = default;
-    bool IsMoveCstr() { return isMoveCstr_; }
-    bool IsCopyCstr() { return isCopyCstr_; }
-    uint32_t GetNum() { return num_; }
+    bool IsMoveCstr() {
+        return isMoveCstr_;
+    }
+    bool IsCopyCstr() {
+        return isCopyCstr_;
+    }
+    uint32_t GetNum() {
+        return num_;
+    }
 
    private:
     uint32_t num_{0};
@@ -72,9 +78,9 @@ TEST(MoveUt, NonMovableElement) {
     std::vector<NonMovableObj> vec;
     vec.reserve(1);
     vec.emplace_back(1);
-    vec.emplace_back(2);  // 触发扩容
+    vec.emplace_back(2); // 触发扩容
 
-    EXPECT_EQ(NonMovableObj::copy_count, 1);  // 原元素拷贝
+    EXPECT_EQ(NonMovableObj::copy_count, 1); // 原元素拷贝
     EXPECT_EQ(vec[0].value, 1);
     EXPECT_EQ(vec[1].value, 2);
 }
@@ -99,7 +105,7 @@ TEST(MoveUt, NoexceptMoveOptimization) {
     std::vector<NoexceptMovableObj> vec;
     vec.reserve(1);
     vec.emplace_back(1);
-    vec.emplace_back(2);  // 触发扩容
+    vec.emplace_back(2); // 触发扩容
 
     EXPECT_EQ(NoexceptMovableObj::move_count, 1);
     EXPECT_EQ(vec[0].value, 1);
@@ -114,13 +120,19 @@ class ThrowOnMoveObj {
 
     explicit ThrowOnMoveObj(int v) : value(v) {
         if (instance_count >= 2) {
-            throw std::runtime_error("default construct failed");  // 只有构造时报异常会回退
+            throw std::runtime_error("default construct failed"); // 只有构造时报异常会回退
         }
         instance_count++;
     }
-    ThrowOnMoveObj(const ThrowOnMoveObj& other) : value(other.value) { instance_count++; }
-    ThrowOnMoveObj(ThrowOnMoveObj&& other) noexcept : value(other.value) { instance_count++; }
-    ~ThrowOnMoveObj() { instance_count--; }
+    ThrowOnMoveObj(const ThrowOnMoveObj& other) : value(other.value) {
+        instance_count++;
+    }
+    ThrowOnMoveObj(ThrowOnMoveObj&& other) noexcept : value(other.value) {
+        instance_count++;
+    }
+    ~ThrowOnMoveObj() {
+        instance_count--;
+    }
 };
 int ThrowOnMoveObj::instance_count = 0;
 
