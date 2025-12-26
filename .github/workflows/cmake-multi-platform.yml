@@ -25,10 +25,16 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Install dependencies
+    - name: Build and install GoogleTest (with gmock)
       run: |
-        sudo apt update
-        sudo apt install -y libgtest-dev cmake
+        git clone https://github.com/google/googletest.git -b v1.17.0 --depth=1
+        cd googletest
+        cmake -B build \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DBUILD_GMOCK=ON \
+          -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+        cmake --build build --parallel $(nproc)
+        sudo cmake --install build --prefix /usr/local
 
     - name: Configure CMake
       run: >
