@@ -12,8 +12,8 @@ class ThreadPool {
     explicit ThreadPool(size_t thread_num = THREAD_NUM_DEFAULT);
     ThreadPool(const ThreadPool&) = delete;
     ThreadPool& operator=(const ThreadPool&) = delete;
-    ThreadPool(ThreadPool&&) = default;
-    ThreadPool& operator=(ThreadPool&&) = default;
+    ThreadPool(ThreadPool&&) = delete;
+    ThreadPool& operator=(ThreadPool&&) = delete;
     ~ThreadPool();
 
     void Destroy();

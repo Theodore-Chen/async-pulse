@@ -1,12 +1,14 @@
-#include <gtest/gtest.h>
 #include <gmock/gmock.h>
-#include <exception>
+#include <gtest/gtest.h>
+
 #include <type_traits>
 
 template <typename Derived>
 class Base {
    public:
-    void Interface() { static_cast<Derived*>(this)->Implementation(); }
+    void Interface() {
+        static_cast<Derived*>(this)->Implementation();
+    }
 };
 
 class Derived : public Base<Derived> {
@@ -18,7 +20,9 @@ template <typename Deriver>
 class Wrapper {
    public:
     Wrapper(Deriver& derived) : derived_(derived) {}
-    void Caller() { derived_.Implementation(); }
+    void Caller() {
+        derived_.Implementation();
+    }
 
    private:
     Deriver& derived_;
@@ -37,9 +41,15 @@ TEST(CrtpUt, Base) {
 template <typename Obj>
 class Counter {
    public:
-    Counter() { ++count; }
-    ~Counter() { --count; }
-    static uint32_t GetCount() { return count; }
+    Counter() {
+        ++count;
+    }
+    ~Counter() {
+        --count;
+    }
+    static uint32_t GetCount() {
+        return count;
+    }
 
    private:
     static uint32_t count;
@@ -77,7 +87,9 @@ TEST(CrtpUt, CounterDstr) {
 // 静态多态测试
 template <typename T>
 struct Shape : T {
-    void draw() const { T::draw_impl(*this); }
+    void draw() const {
+        T::draw_impl(*this);
+    }
 };
 
 struct Circle {
@@ -125,7 +137,9 @@ TEST(CrtpUt, ChainingOperators) {
 // 类型特征检查测试
 template <typename T>
 struct Cloneable {
-    T clone() const { return static_cast<const T*>(this)->clone_impl(); }
+    T clone() const {
+        return static_cast<const T*>(this)->clone_impl();
+    }
 };
 
 struct Widget : Cloneable<Widget> {
@@ -170,7 +184,9 @@ struct ValidOp : ExceptionBase<ValidOp> {
 };
 
 struct InvalidOp : ExceptionBase<InvalidOp> {
-    void throw_if_invalid() { throw std::runtime_error("invalid"); }
+    void throw_if_invalid() {
+        throw std::runtime_error("invalid");
+    }
     void do_execute() {}
 };
 
