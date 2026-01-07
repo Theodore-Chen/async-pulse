@@ -50,6 +50,12 @@ class uninitialized_buffer {
     size_t capacity_;
 };
 
+#if defined(__cpp_lib_hardware_interference_size)
+constexpr size_t CACHE_LINE_SIZE = std::hardware_constructive_interference_size;
+#else
+constexpr size_t CACHE_LINE_SIZE = 64;
+#endif
+
 template <typename T>
 class lock_free_bounded_queue {
    public:
@@ -239,8 +245,8 @@ class lock_free_bounded_queue {
    private:
     uninitialized_buffer<cell_type> buffer_;
     const size_t buffer_mask_;
-    alignas(std::hardware_constructive_interference_size) sequence_type pos_enqueue_;
-    alignas(std::hardware_constructive_interference_size) sequence_type pos_dequeue_;
-    alignas(std::hardware_constructive_interference_size) std::atomic<bool> is_valid_{false};
+    alignas(CACHE_LINE_SIZE) sequence_type pos_enqueue_;
+    alignas(CACHE_LINE_SIZE) sequence_type pos_dequeue_;
+    alignas(CACHE_LINE_SIZE) std::atomic<bool> is_valid_{false};
     std::atomic<bool> is_closed_{false};
 };
