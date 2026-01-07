@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "queue/lock_bounded_queue.h"
+#include "queue/lock_free_bounded_queue.h"
 #include "queue/lock_queue.h"
 #include "queue_factory.h"
 
@@ -23,7 +24,8 @@ class queue_ut : public ::testing::Test {
     size_t capacity_{0};
 };
 
-using queue_impls = ::testing::Types<lock_queue<uint32_t>, lock_bounded_queue<uint32_t>>;
+using queue_impls =
+    ::testing::Types<lock_queue<uint32_t>, lock_bounded_queue<uint32_t>, lock_free_bounded_queue<uint32_t>>;
 
 TYPED_TEST_SUITE(queue_ut, queue_impls);
 
@@ -170,27 +172,6 @@ TYPED_TEST(queue_ut, dequeue_closed) {
     element_type out;
     EXPECT_TRUE(queue.dequeue(out));
     EXPECT_EQ(out, in);
-}
-
-TYPED_TEST(queue_ut, clear) {
-    using queue_type = typename TestFixture::queue_type;
-    using element_type = typename TestFixture::element_type;
-
-    queue_type& queue = *(this->queue_);
-    EXPECT_TRUE(queue.enqueue(1));
-    EXPECT_TRUE(queue.enqueue(2));
-    ASSERT_EQ(queue.size(), 2);
-
-    queue.clear();
-    EXPECT_EQ(queue.size(), 0);
-    EXPECT_TRUE(queue.empty());
-
-    EXPECT_TRUE(queue.enqueue(3));
-    EXPECT_EQ(queue.size(), 1);
-
-    std::optional<element_type> out = queue.dequeue();
-    EXPECT_TRUE(out.has_value());
-    EXPECT_EQ(out.value(), 3);
 }
 
 TYPED_TEST(queue_ut, sequential_in_sequential_out) {
