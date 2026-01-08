@@ -1,54 +1,10 @@
+#pragma once
+
 #include <atomic>
-#include <memory>
 #include <optional>
-#include <thread>
 
-template <typename T, typename Alloc = std::allocator<int>>
-class uninitialized_buffer {
-   public:
-    using value_type = T;
-    using allocator = Alloc;
-    using allocator_type = typename std::allocator_traits<allocator>::template rebind_alloc<value_type>;
-
-   public:
-    uninitialized_buffer(size_t capacity) : capacity_(capacity) {
-        if (capacity >= 2 && (capacity & (capacity - 1)) == 0) {
-            buffer_ = allocator_type().allocate(capacity);
-        } else {
-            capacity_ = 0;
-            buffer_ = nullptr;
-        }
-    }
-    ~uninitialized_buffer() {
-        allocator_type().deallocate(buffer_, capacity_);
-    }
-    uninitialized_buffer(const uninitialized_buffer&) = delete;
-    uninitialized_buffer& operator=(const uninitialized_buffer&) = delete;
-
-    value_type& operator[](size_t i) {
-        return buffer_[i];
-    }
-
-    const value_type& operator[](size_t i) const {
-        return buffer_[i];
-    }
-
-    size_t capacity() const noexcept {
-        return capacity_;
-    }
-
-    value_type* buffer() noexcept {
-        return buffer_;
-    }
-
-    value_type* buffer() const noexcept {
-        return buffer_;
-    }
-
-   private:
-    value_type* buffer_;
-    size_t capacity_;
-};
+#include "opt/back_off.h"
+#include "opt/buffer.h"
 
 #if defined(__cpp_lib_hardware_interference_size)
 constexpr size_t CACHE_LINE_SIZE = std::hardware_constructive_interference_size;
@@ -56,7 +12,7 @@ constexpr size_t CACHE_LINE_SIZE = std::hardware_constructive_interference_size;
 constexpr size_t CACHE_LINE_SIZE = 64;
 #endif
 
-template <typename T>
+template <typename T, typename Buffer = uninitialized_buffer<void*>, typename BackOff = back_off>
 class lock_free_bounded_queue {
    public:
     using value_type = T;
@@ -67,6 +23,8 @@ class lock_free_bounded_queue {
 
         cell_type() {}
     };
+    using buffer_type = typename Buffer::template rebind<cell_type>::other;
+    using back_off_strategy = BackOff;
 
    public:
     lock_free_bounded_queue(size_t capacity) : buffer_(capacity), buffer_mask_(capacity - 1) {
@@ -176,6 +134,7 @@ class lock_free_bounded_queue {
             return false;
         }
 
+        back_off_strategy bkoff;
         size_t pos = pos_enqueue_.load();
         cell_type* cell;
 
@@ -193,7 +152,7 @@ class lock_free_bounded_queue {
                         return false;
                     }
                 }
-                std::this_thread::yield();
+                bkoff();
                 pos = pos_enqueue_.load();
             } else {
                 pos = pos_enqueue_.load();
@@ -208,6 +167,7 @@ class lock_free_bounded_queue {
 
     template <bool Blocking, typename Func>
     bool dequeue_impl(Func f) {
+        back_off_strategy bkoff;
         size_t pos = pos_dequeue_.load();
         cell_type* cell;
 
@@ -228,7 +188,7 @@ class lock_free_bounded_queue {
                 if (is_closed_.load() == true) {
                     return false;
                 }
-                std::this_thread::yield();
+                bkoff();
                 pos = pos_dequeue_.load();
             } else {
                 pos = pos_dequeue_.load();
@@ -243,7 +203,7 @@ class lock_free_bounded_queue {
     }
 
    private:
-    uninitialized_buffer<cell_type> buffer_;
+    buffer_type buffer_;
     const size_t buffer_mask_;
     alignas(CACHE_LINE_SIZE) sequence_type pos_enqueue_;
     alignas(CACHE_LINE_SIZE) sequence_type pos_dequeue_;
