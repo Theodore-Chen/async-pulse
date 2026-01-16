@@ -5,7 +5,6 @@ add_executable(thread_pool_ut)
 target_sources(thread_pool_ut PRIVATE
     thread_pool_bind_ut.cpp
     thread_pool_ut.cpp
-    fsm_ut.cpp
 )
 
 target_include_directories(thread_pool_ut PUBLIC ${ROOT_DIR}/src)

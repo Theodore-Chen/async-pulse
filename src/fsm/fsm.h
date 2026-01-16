@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <future>
+#include <thread>
 
 #include "fsm/state_table.h"
 #include "queue/lock_queue.h"
@@ -12,8 +13,13 @@ class FSM {
     FSM(StateTable<State, Event>* stateTable, StateChangeTable<State, Event>* changeTable, State initial) {
         curState_.store(initial);
         ready_.store(true);
-        pause_.store(false);
         pooling_ = std::async(std::launch::async, FSMProcessor(this, stateTable, changeTable));
+
+        while (!threadStarted_.load()) {
+            std::this_thread::yield();
+        }
+
+        pause_.store(false);
     }
     ~FSM() {
         ready_.store(false);
@@ -32,7 +38,7 @@ class FSM {
         return fut;
     }
     State GetState() {
-        return curState_;
+        return curState_.load();
     }
 
    private:
@@ -45,25 +51,29 @@ class FSM {
             if (!fsm_) {
                 return;
             }
-            while (fsm_->ready_.load() == true) {
-                if (fsm_->pause_.load() == false) {
-                    if (std::optional<Handle> handle = fsm_->queue_.dequeue()) {
-                        stateTable_.Callback(fsm_->curState_, handle.value().first);
-                        ChangeState(handle.value().first);
-                        handle.value().second.set_value();
-                    }
+            fsm_->threadStarted_.store(true);
+            while (fsm_->ready_.load()) {
+                if (fsm_->pause_.load()) {
+                    continue;
                 }
+                std::optional<Handle> handle = fsm_->queue_.dequeue();
+                if (!handle) {
+                    break;  // Queue closed, exit loop
+                }
+                stateTable_.Callback(fsm_->curState_.load(), handle.value().first);
+                ChangeState(handle.value().first);
+                handle.value().second.set_value();
             }
         }
 
        private:
         void ChangeState(Event event) {
             State toState;
-            if (changeTable_.GetTostate(fsm_->curState_, event, toState)) {
-                stateTable_.Exit(fsm_->curState_, event);
+            if (changeTable_.GetTostate(fsm_->curState_.load(), event, toState)) {
+                stateTable_.Exit(fsm_->curState_.load(), event);
                 stateTable_.Entry(toState, event);
                 stateTable_.Callback(toState, event);
-                fsm_->curState_ = toState;
+                fsm_->curState_.store(toState);
             }
         };
 
@@ -82,4 +92,5 @@ class FSM {
     std::atomic<State> curState_;
     std::atomic<bool> pause_{true};
     std::atomic<bool> ready_{false};
+    std::atomic<bool> threadStarted_{false};
 };
