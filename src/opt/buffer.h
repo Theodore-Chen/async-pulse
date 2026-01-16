@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <cassert>
 
 template <typename T, typename Alloc = std::allocator<int>>
 class uninitialized_buffer {
@@ -15,15 +16,10 @@ class uninitialized_buffer {
     };
 
    public:
-    uninitialized_buffer(size_t capacity) : capacity_(capacity) {
-        if (capacity >= 2 && (capacity & (capacity - 1)) == 0) {
-            buffer_ = allocator_type().allocate(capacity);
-        } else {
-            capacity_ = 0;
-            buffer_ = nullptr;
-        }
+    explicit uninitialized_buffer(size_t capacity) : buffer_(allocator_type().allocate(capacity)), capacity_(capacity) {
+        assert(capacity >= 2 && (capacity & (capacity - 1)) == 0 && "capacity must be power of 2 and >= 2");
     }
-    ~uninitialized_buffer() {
+    ~uninitialized_buffer() noexcept {
         allocator_type().deallocate(buffer_, capacity_);
     }
     uninitialized_buffer(const uninitialized_buffer&) = delete;
@@ -50,6 +46,6 @@ class uninitialized_buffer {
     }
 
    private:
-    value_type* buffer_;
-    size_t capacity_;
+    value_type* const buffer_;
+    const size_t capacity_;
 };

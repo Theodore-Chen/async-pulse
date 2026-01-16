@@ -2,10 +2,16 @@
 
 #include <thread>
 
+struct back_off_default_traits {
+    static constexpr size_t lower_bound = 16;
+    static constexpr size_t upper_bound = 16 * 1024;
+};
+
+template <typename Traits = back_off_default_traits>
 class back_off {
    public:
     void operator()() noexcept {
-        if (cur_spin_ <= upper_bound_) {
+        if (cur_spin_ <= Traits::upper_bound) {
             for (size_t n = 0; n < cur_spin_; n++) {
                 spin();
             }
@@ -16,7 +22,7 @@ class back_off {
     }
 
    private:
-    void spin() {
+    void spin() noexcept {
 #if defined(__x86_64__) || defined(__i386__)
         asm volatile("pause;");
 #elif defined(__aarch64__) || defined(__arm__)
@@ -24,12 +30,10 @@ class back_off {
 #endif
     }
 
-    void yield() {
+    void yield() noexcept {
         std::this_thread::yield();
     }
 
    private:
-    size_t lower_bound_ = 16;
-    size_t upper_bound_ = 16 * 1024;
-    size_t cur_spin_ = lower_bound_;
+    size_t cur_spin_ = Traits::lower_bound;
 };

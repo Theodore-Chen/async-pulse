@@ -13,7 +13,7 @@ constexpr size_t CACHE_LINE_SIZE = std::hardware_constructive_interference_size;
 constexpr size_t CACHE_LINE_SIZE = 64;
 #endif
 
-template <typename T, typename Buffer = uninitialized_buffer<void*>, typename BackOff = back_off>
+template <typename T, typename Buffer = uninitialized_buffer<void*>, typename BackOff = back_off<>>
 class lock_free_bounded_queue {
    public:
     using value_type = T;
