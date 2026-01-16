@@ -77,6 +77,21 @@ class lock_bounded_queue {
         return true;
     }
 
+    template <typename Func>
+    bool try_dequeue_with(Func&& f) {
+        {
+            std::lock_guard<std::mutex> lock(mtx_);
+            if (closed_ || queue_.empty()) {
+                return false;
+            }
+
+            std::forward<Func>(f)(queue_.front());
+            queue_.pop();
+        }
+        cv_.notify_one();
+        return true;
+    }
+
     bool dequeue(value_type& val) {
         return dequeue_with([&val](value_type& item) { val = std::move(item); });
     }
@@ -101,12 +116,6 @@ class lock_bounded_queue {
     bool is_closed() {
         std::lock_guard<std::mutex> lock(mtx_);
         return closed_;
-    }
-
-    void clear() {
-        std::lock_guard<std::mutex> lock(mtx_);
-        std::queue<value_type> empty_queue;
-        queue_.swap(empty_queue);
     }
 
     size_t size() {

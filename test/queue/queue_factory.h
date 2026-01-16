@@ -15,7 +15,7 @@ struct queue_factory;
 
 template <typename QueueType, size_t Capacity>
 struct queue_factory<QueueType, Capacity, std::enable_if_t<has_capacity_v<QueueType>>> {
-    static const size_t capacity_ = Capacity;
+    static constexpr size_t capacity_ = Capacity;
     static std::unique_ptr<QueueType> create() {
         return std::make_unique<QueueType>(capacity_);
     }
@@ -23,7 +23,7 @@ struct queue_factory<QueueType, Capacity, std::enable_if_t<has_capacity_v<QueueT
 
 template <typename QueueType, size_t Capacity>
 struct queue_factory<QueueType, Capacity, std::enable_if_t<!has_capacity_v<QueueType>>> {
-    static const size_t capacity_ = Capacity;
+    static constexpr size_t capacity_ = Capacity;
     static std::unique_ptr<QueueType> create() {
         return std::make_unique<QueueType>();
     }

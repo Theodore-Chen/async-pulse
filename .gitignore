@@ -43,3 +43,6 @@ CMakePresets.json
 
 # Compiled Commands
 compile_commands.json
+
+# Claude Code project instructions
+CLAUDE.md

@@ -3,6 +3,7 @@ set(CMAKE_CXX_SAVE_PREPROCESSED_FILES ON)
 add_executable(queue_ut)
 
 target_sources(queue_ut PRIVATE
+    bounded_queue_ut.cpp
     queue_ut.cpp
 )
 
