@@ -1,4 +1,4 @@
-add_library(thread_pool_ut_lib STATIC ${ROOT_DIR}/src/thread_pool_bind.cpp)
+add_library(thread_pool_ut_lib STATIC ${ROOT_DIR}/src/thread_pool/thread_pool_bind.cpp)
 
 add_executable(thread_pool_ut)
 

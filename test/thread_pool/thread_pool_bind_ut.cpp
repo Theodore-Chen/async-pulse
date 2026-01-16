@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "thread_pool_bind.h"
+#include "thread_pool/thread_pool_bind.h"
 
 TEST(ThreadPoolBindUt, Create) {
     ThreadPool threadPool(ThreadPool::THREAD_NUM_DEFAULT);
