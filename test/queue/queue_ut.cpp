@@ -29,6 +29,7 @@ using queue_impls =
 
 TYPED_TEST_SUITE(queue_ut, queue_impls);
 
+// ========== Basic State Tests ==========
 TYPED_TEST(queue_ut, init_empty) {
     using queue_type = typename TestFixture::queue_type;
 
@@ -38,6 +39,7 @@ TYPED_TEST(queue_ut, init_empty) {
     EXPECT_EQ(queue.empty(), true);
 }
 
+// ========== Enqueue Tests ==========
 TYPED_TEST(queue_ut, enqueue_lvalue) {
     using queue_type = typename TestFixture::queue_type;
     using element_type = typename TestFixture::element_type;
@@ -74,6 +76,47 @@ TYPED_TEST(queue_ut, enqueue_with_lambda) {
     EXPECT_FALSE(queue.empty());
 }
 
+TYPED_TEST(queue_ut, emplace) {
+    using queue_type = typename TestFixture::queue_type;
+    using element_type = typename TestFixture::element_type;
+
+    queue_type& queue = *(this->queue_);
+
+    EXPECT_TRUE(queue.emplace(42));
+    EXPECT_EQ(queue.size(), 1);
+
+    element_type out;
+    EXPECT_TRUE(queue.dequeue(out));
+    EXPECT_EQ(out, 42);
+}
+
+TYPED_TEST(queue_ut, try_enqueue_with) {
+    using queue_type = typename TestFixture::queue_type;
+    using element_type = typename TestFixture::element_type;
+
+    queue_type& queue = *(this->queue_);
+
+    auto f = [](element_type& dest) { dest = 42; };
+    EXPECT_TRUE(queue.try_enqueue_with(f));
+    EXPECT_EQ(queue.size(), 1);
+
+    element_type out;
+    EXPECT_TRUE(queue.dequeue(out));
+    EXPECT_EQ(out, 42);
+}
+
+TYPED_TEST(queue_ut, try_enqueue_with_after_close) {
+    using queue_type = typename TestFixture::queue_type;
+    using element_type = typename TestFixture::element_type;
+
+    queue_type& queue = *(this->queue_);
+
+    queue.close();
+    auto f = [](element_type& dest) { dest = 42; };
+    EXPECT_FALSE(queue.try_enqueue_with(f));
+}
+
+// ========== Dequeue Tests ==========
 TYPED_TEST(queue_ut, dequeue_lvalue) {
     using queue_type = typename TestFixture::queue_type;
     using element_type = typename TestFixture::element_type;
@@ -134,6 +177,34 @@ TYPED_TEST(queue_ut, dequeue_optional) {
     EXPECT_EQ(out.value(), in);
 }
 
+TYPED_TEST(queue_ut, try_dequeue_with) {
+    using queue_type = typename TestFixture::queue_type;
+    using element_type = typename TestFixture::element_type;
+
+    queue_type& queue = *(this->queue_);
+
+    element_type value;
+    EXPECT_FALSE(queue.try_dequeue_with([&value](element_type& src) { value = src; }));
+
+    EXPECT_TRUE(queue.enqueue(42));
+    EXPECT_TRUE(queue.try_dequeue_with([&value](element_type& src) { value = src; }));
+    EXPECT_EQ(value, 42);
+
+    EXPECT_FALSE(queue.try_dequeue_with([&value](element_type& src) { value = src; }));
+}
+
+TYPED_TEST(queue_ut, try_dequeue_with_after_close) {
+    using queue_type = typename TestFixture::queue_type;
+    using element_type = typename TestFixture::element_type;
+
+    queue_type& queue = *(this->queue_);
+
+    queue.close();
+    element_type value;
+    EXPECT_FALSE(queue.try_dequeue_with([&value](element_type& src) { value = src; }));
+}
+
+// ========== Close Behavior Tests ==========
 TYPED_TEST(queue_ut, is_closed) {
     using queue_type = typename TestFixture::queue_type;
 
@@ -174,6 +245,30 @@ TYPED_TEST(queue_ut, dequeue_closed) {
     EXPECT_EQ(out, in);
 }
 
+TYPED_TEST(queue_ut, dequeue_with_after_close) {
+    using queue_type = typename TestFixture::queue_type;
+    using element_type = typename TestFixture::element_type;
+
+    queue_type& queue = *(this->queue_);
+
+    queue.close();
+    element_type value;
+    auto f = [&value](element_type& src) { value = src; };
+    EXPECT_FALSE(queue.dequeue_with(f));
+}
+
+TYPED_TEST(queue_ut, dequeue_optional_empty) {
+    using queue_type = typename TestFixture::queue_type;
+    using element_type = typename TestFixture::element_type;
+
+    queue_type& queue = *(this->queue_);
+
+    queue.close();
+    std::optional<element_type> out = queue.dequeue();
+    EXPECT_FALSE(out.has_value());
+}
+
+// ========== Sequential Bulk Tests ==========
 TYPED_TEST(queue_ut, sequential_in_sequential_out) {
     using queue_type = typename TestFixture::queue_type;
     using element_type = typename TestFixture::element_type;
@@ -218,6 +313,39 @@ TYPED_TEST(queue_ut, sequential_in_sequential_out_with_lambda) {
     EXPECT_TRUE(queue.empty());
 }
 
+// ========== Boundary Condition Tests ==========
+TYPED_TEST(queue_ut, partial_fill) {
+    using queue_type = typename TestFixture::queue_type;
+    using element_type = typename TestFixture::element_type;
+
+    queue_type& queue = *(this->queue_);
+
+    const size_t half_capacity = TestFixture::capacity_ / 2;
+    for (size_t i = 0; i < half_capacity; ++i) {
+        EXPECT_TRUE(queue.enqueue(static_cast<element_type>(i)));
+    }
+
+    EXPECT_EQ(queue.size(), half_capacity);
+    EXPECT_FALSE(queue.empty());
+}
+
+TYPED_TEST(queue_ut, enqueue_dequeue_interleaved) {
+    using queue_type = typename TestFixture::queue_type;
+    using element_type = typename TestFixture::element_type;
+
+    queue_type& queue = *(this->queue_);
+
+    for (int i = 0; i < 10; ++i) {
+        EXPECT_TRUE(queue.enqueue(static_cast<element_type>(i)));
+        element_type out;
+        EXPECT_TRUE(queue.dequeue(out));
+        EXPECT_EQ(out, static_cast<element_type>(i));
+    }
+
+    EXPECT_TRUE(queue.empty());
+}
+
+// ========== Concurrent Tests ==========
 template <typename QueueType>
 std::vector<std::future<void>> create_producer_tasks(QueueType& queue, std::atomic<size_t>& count, size_t item_num,
                                                      size_t producer_num) {

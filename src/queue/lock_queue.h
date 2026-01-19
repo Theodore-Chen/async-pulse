@@ -32,6 +32,11 @@ class lock_queue {
     }
 
     template <typename Func>
+    bool try_enqueue_with(Func&& f) {
+        return enqueue_with(std::forward<Func>(f));
+    }
+
+    template <typename Func>
     bool enqueue_with(Func&& f) {
         return enqueue_impl([&f](std::queue<value_type>& queue) {
             value_type val;
@@ -51,6 +56,19 @@ class lock_queue {
     template <typename... Args>
     bool emplace(Args&&... args) {
         return enqueue_impl([&args...](std::queue<value_type>& queue) { queue.emplace(std::forward<Args>(args)...); });
+    }
+
+    template <typename Func>
+    bool try_dequeue_with(Func&& f) {
+        std::lock_guard<std::mutex> lock(mtx_);
+        if (closed_ || queue_.empty()) {
+            return false;
+        }
+
+        std::forward<Func>(f)(queue_.front());
+        queue_.pop();
+        cond_.notify_one();
+        return true;
     }
 
     template <typename Func>

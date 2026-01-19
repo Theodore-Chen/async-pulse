@@ -1,8 +1,8 @@
 #pragma once
 
 #include <atomic>
-#include <optional>
 #include <cassert>
+#include <optional>
 
 #include "opt/back_off.h"
 #include "opt/buffer.h"
