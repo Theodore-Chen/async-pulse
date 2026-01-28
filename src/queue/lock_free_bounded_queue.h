@@ -6,12 +6,7 @@
 
 #include "opt/back_off.h"
 #include "opt/buffer.h"
-
-#if defined(__cpp_lib_hardware_interference_size)
-constexpr size_t CACHE_LINE_SIZE = std::hardware_constructive_interference_size;
-#else
-constexpr size_t CACHE_LINE_SIZE = 64;
-#endif
+#include "opt/cache_line.h"
 
 template <typename T, typename Buffer = uninitialized_buffer<void*>, typename BackOff = back_off<>>
 class lock_free_bounded_queue {

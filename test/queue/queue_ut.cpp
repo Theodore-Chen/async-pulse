@@ -6,6 +6,7 @@
 #include "queue/lock_bounded_queue.h"
 #include "queue/lock_free_bounded_queue.h"
 #include "queue/lock_queue.h"
+#include "queue/ms_queue.h"
 #include "queue_factory.h"
 
 template <typename T>
@@ -24,8 +25,8 @@ class queue_ut : public ::testing::Test {
     size_t capacity_{0};
 };
 
-using queue_impls =
-    ::testing::Types<lock_queue<uint32_t>, lock_bounded_queue<uint32_t>, lock_free_bounded_queue<uint32_t>>;
+using queue_impls = ::testing::Types<lock_queue<uint32_t>, lock_bounded_queue<uint32_t>,
+                                     lock_free_bounded_queue<uint32_t>, ms_queue<uint32_t>>;
 
 TYPED_TEST_SUITE(queue_ut, queue_impls);
 
@@ -440,4 +441,58 @@ TYPED_TEST(queue_ut, single_in_single_out) {
     const size_t CONSUMER_NUM = 1;
 
     multi_in_multi_out_test(queue, TestFixture::capacity_, PRODUCER_NUM, CONSUMER_NUM);
+}
+
+// ========== Stress Test for Concurrent Dequeue ==========
+// This test specifically targets the use-after-free race condition
+// that can occur when multiple threads compete to dequeue nodes.
+TYPED_TEST(queue_ut, concurrent_dequeue_stress) {
+    using queue_type = typename TestFixture::queue_type;
+    using element_type = typename TestFixture::element_type;
+
+    queue_type& queue = *(this->queue_);
+
+    const size_t ITEM_NUM = 1000;
+    const size_t CONSUMER_NUM = 32;
+
+    // Enqueue all items first
+    for (size_t i = 0; i < ITEM_NUM; i++) {
+        EXPECT_TRUE(queue.enqueue(static_cast<element_type>(i)));
+    }
+
+    // Close the queue after enqueuing
+    queue.close();
+
+    std::atomic<size_t> consume_cnt{0};
+    std::atomic<bool> has_error{false};
+    std::vector<std::future<void>> consumer_tasks;
+
+    // Create many consumers competing to dequeue
+    for (size_t i = 0; i < CONSUMER_NUM; i++) {
+        consumer_tasks.emplace_back(std::async(std::launch::async, [&]() {
+            element_type out;
+            size_t local_cnt = 0;
+            while (queue.dequeue(out)) {
+                local_cnt++;
+                consume_cnt.fetch_add(1);
+                // Sanity check: value should be less than ITEM_NUM
+                if (out >= ITEM_NUM) {
+                    has_error.store(true);
+                }
+            }
+        }));
+    }
+
+    // Wait with timeout to detect hangs
+    auto start = std::chrono::steady_clock::now();
+    for (auto& task : consumer_tasks) {
+        auto status = task.wait_for(std::chrono::seconds(10));
+        if (status == std::future_status::timeout) {
+            FAIL() << "Test timed out - likely deadlock or infinite loop detected";
+        }
+    }
+
+    EXPECT_EQ(consume_cnt, ITEM_NUM);
+    EXPECT_FALSE(has_error.load());
+    EXPECT_TRUE(queue.empty());
 }

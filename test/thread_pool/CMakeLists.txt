@@ -1,5 +1,7 @@
 add_library(thread_pool_ut_lib STATIC ${ROOT_DIR}/src/thread_pool/thread_pool_bind.cpp)
 
+target_include_directories(thread_pool_ut_lib PUBLIC ${ROOT_DIR}/src)
+
 add_executable(thread_pool_ut)
 
 target_sources(thread_pool_ut PRIVATE
