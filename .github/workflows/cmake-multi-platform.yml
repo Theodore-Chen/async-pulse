@@ -20,6 +20,16 @@ jobs:
           - compiler_name: clang
             cc: clang
             cxx: clang++
+          - compiler_name: gcc-asan
+            cc: gcc
+            cxx: g++
+            build_type: Debug
+            sanitizer: address
+          - compiler_name: clang-asan
+            cc: clang
+            cxx: clang++
+            build_type: Debug
+            sanitizer: address
 
     steps:
     - name: Checkout code
@@ -41,7 +51,8 @@ jobs:
         cmake -B build
         -DCMAKE_C_COMPILER=${{ matrix.cc }}
         -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
-        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_BUILD_TYPE=${{ matrix.build_type || 'Release' }}
+        ${{ matrix.sanitizer && '-DENABLE_SANITIZERS=' || '' }}${{ matrix.sanitizer }}
 
     - name: Build
       run: cmake --build build --parallel $(nproc)
