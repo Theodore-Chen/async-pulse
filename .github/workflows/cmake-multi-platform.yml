@@ -46,6 +46,17 @@ jobs:
         cmake --build build --parallel $(nproc)
         sudo cmake --install build --prefix /usr/local
 
+    - name: Build and install Google Benchmark
+      run: |
+        git clone https://github.com/google/benchmark.git -b v1.9.5 --depth=1
+        cd benchmark
+        cmake -B build \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DBENCHMARK_ENABLE_TESTING=OFF \
+          -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+        cmake --build build --parallel $(nproc)
+        sudo cmake --install build --prefix /usr/local
+
     - name: Configure CMake
       run: >
         cmake -B build
