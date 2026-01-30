@@ -9,4 +9,14 @@ enable_testing()
 
 set(ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
-add_subdirectory(test)
+option(BUILD_TESTS "Build test executables (requires Google Test)" ON)
+
+if(BUILD_TESTS)
+    add_subdirectory(test)
+endif()
+
+option(BUILD_BENCHMARKS "Build benchmark executables (requires Google Benchmark)" ON)
+
+if(BUILD_BENCHMARKS)
+    add_subdirectory(benchmark)
+endif()

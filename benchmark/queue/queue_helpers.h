@@ -1,0 +1,17 @@
+#pragma once
+
+#include <cstddef>
+
+namespace benchmark {
+
+template <typename Queue>
+void fill_queue_to_percentage(Queue& queue, double percentage) {
+    size_t capacity = queue.capacity();
+    size_t target_count = static_cast<size_t>(capacity * percentage);
+
+    for (size_t i = 0; i < target_count; ++i) {
+        queue.enqueue(static_cast<int>(i));
+    }
+}
+
+} // namespace benchmark

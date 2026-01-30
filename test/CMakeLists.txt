@@ -4,8 +4,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# 选项：启用地址消毒器（AddressSanitizer）
-# 注意：此选项仅用于测试，不应在生产构建中使用
 option(ENABLE_SANITIZERS "Enable sanitizers for testing (address, undefined, thread, etc.)" OFF)
 
 if(ENABLE_SANITIZERS)
@@ -28,7 +26,6 @@ if(ENABLE_SANITIZERS)
         set(SANITIZER_FLAGS "-fsanitize=${ENABLE_SANITIZERS} -fno-omit-frame-pointer -g")
     endif()
 
-    # 将 sanitizer 标志添加到编译和链接选项
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${SANITIZER_FLAGS}")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SANITIZER_FLAGS}")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${SANITIZER_FLAGS}")
