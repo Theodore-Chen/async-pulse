@@ -152,7 +152,7 @@ std::vector<std::future<void>> launch_producers(Queue& queue,
     std::vector<std::future<void>> tasks;
     tasks.reserve(config.producer_count);
     for (size_t i = 0; i < config.producer_count; ++i) {
-        tasks.emplace_back(std::async(std::launch::async, [&]() {
+        tasks.emplace_back(std::async(std::launch::async, [&queue, &config, &validator, &sync, &producers_done, i]() {
             producer_worker(queue, i, config.items_per_producer, validator, sync, producers_done);
         }));
     }
@@ -168,7 +168,7 @@ std::vector<std::future<void>> launch_consumers(Queue& queue,
     std::vector<std::future<void>> tasks;
     tasks.reserve(config.consumer_count);
     for (size_t i = 0; i < config.consumer_count; ++i) {
-        tasks.emplace_back(std::async(std::launch::async, [&]() {
+        tasks.emplace_back(std::async(std::launch::async, [&queue, &config, &validator, &sync, &producers_done, i]() {
             consumer_worker(queue, validator, sync, producers_done, config.producer_count);
         }));
     }
@@ -182,7 +182,9 @@ std::vector<std::future<void>> launch_consumers(Queue& queue,
     std::vector<std::future<void>> tasks;
     tasks.reserve(config.consumer_count);
     for (size_t i = 0; i < config.consumer_count; ++i) {
-        tasks.emplace_back(std::async(std::launch::async, [&]() { counting_consumer(queue, consumed_count); }));
+        tasks.emplace_back(std::async(std::launch::async, [&queue, &consumed_count]() {
+            counting_consumer(queue, consumed_count);
+        }));
     }
     return tasks;
 }
