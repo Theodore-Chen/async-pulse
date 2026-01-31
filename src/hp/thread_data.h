@@ -24,7 +24,11 @@ struct thread_data {
     thread_data(const thread_data&) = delete;
     thread_data& operator=(const thread_data&) = delete;
 
-    void sync() { sync_.fetch_add(1, std::memory_order_acq_rel); }
+    void sync() {
+        // 增加全局同步计数器，并等待所有其他线程完成当前操作
+        sync_.fetch_add(1, std::memory_order_acq_rel);
+    }
+
     guard* get_guards() const { return hazards.begin(); }
     retired_ptr* get_retired() const { return retired.first(); }
 };

@@ -120,10 +120,23 @@ bool smr::is_protected(void* ptr) const {
 }
 
 void smr::classic_scan(thread_data* rec) {
+    // 首先递增所有线程的 sync 计数器来标记扫描点
+    thread_record* tr = thread_list_.load(std::memory_order_acquire);
+    while (tr) {
+        if (tr->active.load(std::memory_order_acquire)) {
+            tr->data->sync_.fetch_add(1, std::memory_order_acq_rel);
+        }
+        tr = tr->next;
+    }
+
+    // 内存屏障，确保 sync 计数器的更新对所有线程可见
+    std::atomic_thread_fence(std::memory_order_seq_cst);
+
+    // 再递增一次自己的 sync
     rec->sync();
 
     std::vector<void*> hp_list;
-    thread_record* tr = thread_list_.load(std::memory_order_acquire);
+    tr = thread_list_.load(std::memory_order_acquire);
     while (tr) {
         if (tr->active.load(std::memory_order_acquire)) {
             thread_data* td = tr->data;
@@ -158,6 +171,19 @@ void smr::classic_scan(thread_data* rec) {
 }
 
 void smr::inplace_scan(thread_data* rec) {
+    // 首先递增所有线程的 sync 计数器来标记扫描点
+    thread_record* tr = thread_list_.load(std::memory_order_acquire);
+    while (tr) {
+        if (tr->active.load(std::memory_order_acquire)) {
+            tr->data->sync_.fetch_add(1, std::memory_order_acq_rel);
+        }
+        tr = tr->next;
+    }
+
+    // 内存屏障，确保 sync 计数器的更新对所有线程可见
+    std::atomic_thread_fence(std::memory_order_seq_cst);
+
+    // 再递增一次自己的 sync
     rec->sync();
 
     retired_ptr* first = rec->retired.first();
@@ -167,7 +193,7 @@ void smr::inplace_scan(thread_data* rec) {
     for (retired_ptr* r = first; r != last; ++r) {
         bool is_protected = false;
 
-        thread_record* tr = thread_list_.load(std::memory_order_acquire);
+        tr = thread_list_.load(std::memory_order_acquire);
         while (tr && !is_protected) {
             if (tr->active.load(std::memory_order_acquire)) {
                 thread_data* td = tr->data;
