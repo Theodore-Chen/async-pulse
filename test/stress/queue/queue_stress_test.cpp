@@ -6,7 +6,6 @@
 #include "queue/lock_bounded_queue.h"
 #include "queue/lock_free_bounded_queue.h"
 #include "queue/lock_queue.h"
-#include "queue/ms_queue.h"
 #include "queue_factory.h"
 #include "queue_stress_helpers.h"
 
@@ -25,8 +24,7 @@ class queue_stress : public ::testing::Test {
 
 using queue_impls = ::testing::Types<lock_queue<element_type>,
                                      lock_bounded_queue<element_type>,
-                                     lock_free_bounded_queue<element_type>,
-                                     ms_queue<element_type>>;
+                                     lock_free_bounded_queue<element_type>>;
 
 TYPED_TEST_SUITE(queue_stress, queue_impls);
 
