@@ -17,7 +17,7 @@ target_sources(queue_ut PRIVATE
     queue_ut.cpp
 )
 
-target_include_directories(queue_ut PRIVATE ${ROOT_DIR}/src/)
+target_include_directories(queue_ut PRIVATE ${ROOT_DIR}/src ${ROOT_DIR}/test)
 
 target_compile_options(queue_ut PRIVATE -fPIC -fno-exceptions)
 

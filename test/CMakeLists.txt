@@ -36,9 +36,6 @@ find_package(GTest REQUIRED)
 
 include(GoogleTest)
 
-add_subdirectory(queue)
-add_subdirectory(std_sandbox)
-add_subdirectory(thread_pool)
-add_subdirectory(fsm)
-# add_subdirectory(gemm_validation)
+add_subdirectory(unit)
 
+add_subdirectory(stress)
