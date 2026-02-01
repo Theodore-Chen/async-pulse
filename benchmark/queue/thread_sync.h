@@ -4,9 +4,6 @@
 #include <cstddef>
 #include <mutex>
 
-namespace benchmark {
-
-// 启动同步器：让所有工作线程等待主线程的启动信号
 struct start_sync {
     std::mutex mtx_;
     std::condition_variable cv_;
@@ -40,5 +37,3 @@ struct start_sync {
         cv_.notify_all();
     }
 };
-
-} // namespace benchmark

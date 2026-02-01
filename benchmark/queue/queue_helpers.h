@@ -2,8 +2,6 @@
 
 #include <cstddef>
 
-namespace benchmark {
-
 template <typename Queue>
 void fill_queue_to_percentage(Queue& queue, double percentage) {
     size_t capacity = queue.capacity();
@@ -13,5 +11,3 @@ void fill_queue_to_percentage(Queue& queue, double percentage) {
         queue.enqueue(static_cast<int>(i));
     }
 }
-
-} // namespace benchmark

@@ -2,8 +2,6 @@
 
 #include <array>
 
-namespace benchmark {
-
 using small_object = int;
 
 struct medium_object {
@@ -22,5 +20,3 @@ struct large_object {
         data[0] = v;
     }
 };
-
-} // namespace benchmark

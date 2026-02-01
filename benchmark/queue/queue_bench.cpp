@@ -1,5 +1,3 @@
-// 队列性能基准测试
-
 #include <benchmark/benchmark.h>
 
 #include "queue_factory.h"
@@ -12,12 +10,12 @@
 #include "queue/lock_queue.h"
 #include "queue/ms_queue.h"
 
-using namespace benchmark;
+constexpr size_t QUEUE_CAPACITY = 1024;
+constexpr size_t BULK_ITEM_COUNT = 1024 * 16;
 
-// 单线程往返测试
 template <typename QueueType>
-static void bm_single_thread_round_trip_int(benchmark::State& state) {
-    auto q = queue_factory<QueueType, 1024>::create();
+void bm_single_thread_round_trip_int(benchmark::State& state) {
+    auto q = queue_factory<QueueType, QUEUE_CAPACITY>::create();
     int value = 42;
     int result;
 
@@ -31,8 +29,8 @@ static void bm_single_thread_round_trip_int(benchmark::State& state) {
 }
 
 template <typename QueueType>
-static void bm_round_trip_small_object(benchmark::State& state) {
-    auto q = queue_factory<QueueType, 1024>::create();
+void bm_round_trip_small_object(benchmark::State& state) {
+    auto q = queue_factory<QueueType, QUEUE_CAPACITY>::create();
     small_object value{42};
     small_object result;
 
@@ -46,8 +44,8 @@ static void bm_round_trip_small_object(benchmark::State& state) {
 }
 
 template <typename QueueType>
-static void bm_round_trip_medium_object(benchmark::State& state) {
-    auto q = queue_factory<QueueType, 1024>::create();
+void bm_round_trip_medium_object(benchmark::State& state) {
+    auto q = queue_factory<QueueType, QUEUE_CAPACITY>::create();
     medium_object value{42};
     medium_object result;
 
@@ -61,8 +59,8 @@ static void bm_round_trip_medium_object(benchmark::State& state) {
 }
 
 template <typename QueueType>
-static void bm_round_trip_large_object(benchmark::State& state) {
-    auto q = queue_factory<QueueType, 1024>::create();
+void bm_round_trip_large_object(benchmark::State& state) {
+    auto q = queue_factory<QueueType, QUEUE_CAPACITY>::create();
     large_object value{42};
     large_object result;
 
@@ -75,9 +73,8 @@ static void bm_round_trip_large_object(benchmark::State& state) {
     state.SetBytesProcessed(state.iterations() * 2 * sizeof(large_object));
 }
 
-// 容量测试（仅适用于有界队列）
 template <typename QueueType>
-static void bm_capacity(benchmark::State& state) {
+void bm_capacity(benchmark::State& state) {
     QueueType q(state.range(0));
     int value = 42;
     int result;
@@ -88,21 +85,19 @@ static void bm_capacity(benchmark::State& state) {
     }
 }
 
-// SPSC: 单生产者单消费者
-template <typename QueueType>
-static void bm_spsc(benchmark::State& state) {
-    constexpr size_t ITEM_NUM = 1024 * 16;
-    const size_t PRODUCER_NUM = 1;
-    const size_t CONSUMER_NUM = 1;
-
+template <typename Queue>
+void run_producer_consumer_benchmark(benchmark::State& state,
+                                      size_t producer_num,
+                                      size_t consumer_num,
+                                      size_t items_per_producer) {
     for (auto _ : state) {
-        auto q = queue_factory<QueueType, 1024>::create();
+        auto q = queue_factory<Queue, QUEUE_CAPACITY>::create();
         start_sync sync;
 
         state.PauseTiming();
-        sync.set_expected_count(PRODUCER_NUM + CONSUMER_NUM);
-        std::vector<std::future<void>> consumers = create_consumers(*q, CONSUMER_NUM, sync);
-        std::vector<std::future<void>> producers = create_producers(*q, PRODUCER_NUM, ITEM_NUM, sync);
+        sync.set_expected_count(producer_num + consumer_num);
+        auto consumers = create_consumers(*q, consumer_num, sync);
+        auto producers = create_producers(*q, producer_num, items_per_producer, sync);
         sync.wait_until_all_ready();
         state.ResumeTiming();
 
@@ -113,102 +108,39 @@ static void bm_spsc(benchmark::State& state) {
         consumers.clear();
     }
 
-    state.SetItemsProcessed(state.iterations() * ITEM_NUM);
+    state.SetItemsProcessed(state.iterations() * items_per_producer * producer_num);
 }
 
-// MPSC: 多生产者单消费者
 template <typename QueueType>
-static void bm_mpsc(benchmark::State& state) {
-    const size_t PRODUCER_NUM = state.range(0);
-    constexpr size_t ITEM_NUM = 1024 * 16;
-    const size_t CONSUMER_NUM = 1;
-
-    for (auto _ : state) {
-        auto q = queue_factory<QueueType, 1024>::create();
-        start_sync sync;
-
-        state.PauseTiming();
-        sync.set_expected_count(PRODUCER_NUM + CONSUMER_NUM);
-        std::vector<std::future<void>> consumers = create_consumers(*q, CONSUMER_NUM, sync);
-        std::vector<std::future<void>> producers = create_producers(*q, PRODUCER_NUM, ITEM_NUM, sync);
-        sync.wait_until_all_ready();
-        state.ResumeTiming();
-
-        sync.notify_all();
-
-        producers.clear();
-        q->close();
-        consumers.clear();
-    }
-
-    state.SetItemsProcessed(state.iterations() * ITEM_NUM * PRODUCER_NUM);
+void bm_spsc(benchmark::State& state) {
+    run_producer_consumer_benchmark<QueueType>(state, 1, 1, BULK_ITEM_COUNT);
 }
 
-// SPMC: 单生产者多消费者
 template <typename QueueType>
-static void bm_spmc(benchmark::State& state) {
-    const size_t CONSUMER_NUM = state.range(0);
-    constexpr size_t ITEM_NUM = 1024 * 16;
-    const size_t PRODUCER_NUM = 1;
-
-    for (auto _ : state) {
-        auto q = queue_factory<QueueType, 1024>::create();
-        start_sync sync;
-
-        state.PauseTiming();
-        sync.set_expected_count(PRODUCER_NUM + CONSUMER_NUM);
-        std::vector<std::future<void>> consumers = create_consumers(*q, CONSUMER_NUM, sync);
-        std::vector<std::future<void>> producers = create_producers(*q, PRODUCER_NUM, ITEM_NUM, sync);
-        sync.wait_until_all_ready();
-        state.ResumeTiming();
-
-        sync.notify_all();
-
-        producers.clear();
-        q->close();
-        consumers.clear();
-    }
-
-    state.SetItemsProcessed(state.iterations() * ITEM_NUM);
+void bm_mpsc(benchmark::State& state) {
+    size_t producer_num = state.range(0);
+    run_producer_consumer_benchmark<QueueType>(state, producer_num, 1, BULK_ITEM_COUNT);
 }
 
-// MPMC: 多生产者多消费者
 template <typename QueueType>
-static void bm_mpmc(benchmark::State& state) {
-    const size_t PRODUCER_NUM = state.range(0);
-    const size_t CONSUMER_NUM = state.range(0);
-    constexpr size_t ITEM_NUM = 1024 * 16;
+void bm_spmc(benchmark::State& state) {
+    size_t consumer_num = state.range(0);
+    run_producer_consumer_benchmark<QueueType>(state, 1, consumer_num, BULK_ITEM_COUNT);
+}
 
-    if (PRODUCER_NUM == 0 || CONSUMER_NUM == 0) {
+template <typename QueueType>
+void bm_mpmc(benchmark::State& state) {
+    size_t thread_num = state.range(0);
+    if (thread_num == 0) {
         state.SkipWithError("Need at least 1 producer and 1 consumer");
         return;
     }
-
-    for (auto _ : state) {
-        auto q = queue_factory<QueueType, 1024>::create();
-        start_sync sync;
-
-        state.PauseTiming();
-        sync.set_expected_count(PRODUCER_NUM + CONSUMER_NUM);
-        std::vector<std::future<void>> consumers = create_consumers(*q, CONSUMER_NUM, sync);
-        std::vector<std::future<void>> producers = create_producers(*q, PRODUCER_NUM, ITEM_NUM, sync);
-        sync.wait_until_all_ready();
-        state.ResumeTiming();
-
-        sync.notify_all();
-
-        producers.clear();
-        q->close();
-        consumers.clear();
-    }
-
-    state.SetItemsProcessed(state.iterations() * ITEM_NUM * PRODUCER_NUM);
+    run_producer_consumer_benchmark<QueueType>(state, thread_num, thread_num, BULK_ITEM_COUNT);
 }
 
-// 压力测试：队列接近满时的性能
 template <typename QueueType>
-static void bm_near_full_90_percent(benchmark::State& state) {
-    auto q = queue_factory<QueueType, 1024>::create();
+void bm_near_full_90_percent(benchmark::State& state) {
+    auto q = queue_factory<QueueType, QUEUE_CAPACITY>::create();
     fill_queue_to_percentage(*q, 0.9);
 
     for (auto _ : state) {
@@ -219,8 +151,8 @@ static void bm_near_full_90_percent(benchmark::State& state) {
 }
 
 template <typename QueueType>
-static void bm_near_full_99_percent(benchmark::State& state) {
-    auto q = queue_factory<QueueType, 1024>::create();
+void bm_near_full_99_percent(benchmark::State& state) {
+    auto q = queue_factory<QueueType, QUEUE_CAPACITY>::create();
     fill_queue_to_percentage(*q, 0.99);
 
     for (auto _ : state) {
@@ -231,8 +163,8 @@ static void bm_near_full_99_percent(benchmark::State& state) {
 }
 
 template <typename QueueType>
-static void bm_empty_queue_try_dequeue(benchmark::State& state) {
-    auto q = queue_factory<QueueType, 1024>::create();
+void bm_empty_queue_try_dequeue(benchmark::State& state) {
+    auto q = queue_factory<QueueType, QUEUE_CAPACITY>::create();
     int value;
 
     for (auto _ : state) {
@@ -240,9 +172,6 @@ static void bm_empty_queue_try_dequeue(benchmark::State& state) {
     }
 }
 
-// 注册基准测试
-
-// 单线程
 BENCHMARK(bm_single_thread_round_trip_int<lock_free_bounded_queue<int>>);
 BENCHMARK(bm_single_thread_round_trip_int<lock_bounded_queue<int>>);
 BENCHMARK(bm_single_thread_round_trip_int<lock_queue<int>>);
@@ -261,35 +190,29 @@ BENCHMARK(bm_round_trip_large_object<lock_bounded_queue<large_object>>);
 BENCHMARK(bm_round_trip_large_object<lock_queue<large_object>>);
 BENCHMARK(bm_round_trip_large_object<ms_queue<large_object>>);
 
-// 容量测试
 BENCHMARK_TEMPLATE(bm_capacity, lock_free_bounded_queue<int>)->Range(64, 4096);
 BENCHMARK_TEMPLATE(bm_capacity, lock_bounded_queue<int>)->Range(64, 4096);
 
-// SPSC
 BENCHMARK(bm_spsc<lock_free_bounded_queue<int>>);
 BENCHMARK(bm_spsc<lock_bounded_queue<int>>);
 BENCHMARK(bm_spsc<lock_queue<int>>);
 BENCHMARK(bm_spsc<ms_queue<int>>);
 
-// MPSC: 2, 4, 16 生产者
 BENCHMARK_TEMPLATE(bm_mpsc, lock_free_bounded_queue<int>)->Args({2})->Args({4})->Args({16});
 BENCHMARK_TEMPLATE(bm_mpsc, lock_bounded_queue<int>)->Args({2})->Args({4})->Args({16});
 BENCHMARK_TEMPLATE(bm_mpsc, lock_queue<int>)->Args({2})->Args({4})->Args({16});
 BENCHMARK_TEMPLATE(bm_mpsc, ms_queue<int>)->Args({2})->Args({4})->Args({16});
 
-// SPMC: 2, 4, 16 消费者
 BENCHMARK_TEMPLATE(bm_spmc, lock_free_bounded_queue<int>)->Args({2})->Args({4})->Args({16});
 BENCHMARK_TEMPLATE(bm_spmc, lock_bounded_queue<int>)->Args({2})->Args({4})->Args({16});
 BENCHMARK_TEMPLATE(bm_spmc, lock_queue<int>)->Args({2})->Args({4})->Args({16});
 BENCHMARK_TEMPLATE(bm_spmc, ms_queue<int>)->Args({2})->Args({4})->Args({16});
 
-// MPMC: 2, 4, 16 生产者+消费者
 BENCHMARK_TEMPLATE(bm_mpmc, lock_free_bounded_queue<int>)->Args({2})->Args({4})->Args({16});
 BENCHMARK_TEMPLATE(bm_mpmc, lock_bounded_queue<int>)->Args({2})->Args({4})->Args({16});
 BENCHMARK_TEMPLATE(bm_mpmc, lock_queue<int>)->Args({2})->Args({4})->Args({16});
 BENCHMARK_TEMPLATE(bm_mpmc, ms_queue<int>)->Args({2})->Args({4})->Args({16});
 
-// 压力测试
 BENCHMARK(bm_near_full_90_percent<lock_free_bounded_queue<int>>);
 BENCHMARK(bm_near_full_90_percent<lock_bounded_queue<int>>);
 BENCHMARK(bm_near_full_99_percent<lock_free_bounded_queue<int>>);
