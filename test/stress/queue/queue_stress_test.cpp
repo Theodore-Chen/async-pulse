@@ -29,7 +29,7 @@ using queue_impls = ::testing::Types<lock_queue<element_type>,
 TYPED_TEST_SUITE(queue_stress, queue_impls);
 
 template <typename Queue>
-static void run_mpmc_test(Queue& queue, const stress_test_config& config, data_validator& validator) {
+void run_mpmc_test(Queue& queue, const stress_test_config& config, data_validator& validator) {
     barrier_sync barrier(config.producer_count + config.consumer_count);
     std::atomic<size_t> producers_done{0};
     sync_context ctx{&validator, &barrier, &producers_done, config.producer_count};
@@ -44,9 +44,9 @@ static void run_mpmc_test(Queue& queue, const stress_test_config& config, data_v
     ASSERT_TRUE(wait_for_completion(consumers, config.timeout_seconds));
 }
 
-static void expect_mpmc_data_integrity(const data_validator& validator,
-                                       size_t producer_count,
-                                       size_t items_per_producer) {
+void expect_mpmc_data_integrity(const data_validator& validator,
+                                size_t producer_count,
+                                size_t items_per_producer) {
     size_t expected_total = producer_count * items_per_producer;
     EXPECT_EQ(validator.total_produced(), expected_total);
     EXPECT_EQ(validator.total_consumed(), expected_total);
@@ -75,7 +75,11 @@ TYPED_TEST(queue_stress, dequeue_stress) {
     stress_test_config config = dequeue_stress_config();
     size_t item_count = std::min(config.items_per_producer, QUEUE_CAPACITY);
 
-    fill_queue_to_count(*this->queue_, item_count);
+    for (size_t i = 0; i < item_count; ++i) {
+        while (!this->queue_->enqueue(element_type{0, i})) {
+            std::this_thread::yield();
+        }
+    }
     this->queue_->close();
 
     std::atomic<size_t> consumed_count{0};

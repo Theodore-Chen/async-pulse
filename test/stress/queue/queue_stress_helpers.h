@@ -155,7 +155,9 @@ void count_consumed(Queue& queue, std::atomic<size_t>& count) {
 }
 
 template <typename Queue>
-std::vector<std::future<void>> launch_producers(Queue& queue, const stress_test_config& config, sync_context& ctx) {
+std::vector<std::future<void>> launch_producers(Queue& queue,
+                                                const stress_test_config& config,
+                                                sync_context& ctx) {
     std::vector<std::future<void>> tasks;
     tasks.reserve(config.producer_count);
     for (size_t i = 0; i < config.producer_count; ++i) {
@@ -203,13 +205,4 @@ bool wait_for_completion(TaskContainer& tasks, uint32_t timeout_seconds) {
         }
     }
     return true;
-}
-
-template <typename Queue>
-void fill_queue_to_count(Queue& queue, size_t count) {
-    for (size_t i = 0; i < count; ++i) {
-        while (!queue.enqueue(element_type{0, i})) {
-            std::this_thread::yield();
-        }
-    }
 }
