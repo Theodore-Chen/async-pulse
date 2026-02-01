@@ -211,7 +211,29 @@ class ms_queue {
 
     template <typename Func>
     bool try_dequeue_with(Func&& f) {
-        return dequeue_with(std::forward<Func>(f));
+        node_ptr head = std::atomic_load(&head_);
+        node_ptr tail = std::atomic_load(&tail_);
+
+        node_ptr next;
+        {
+            std::lock_guard<std::mutex> lock(head->next_mutex);
+            next = head->next;
+        }
+
+        if (head == tail) {
+            if (next == nullptr) {
+                return false;
+            }
+            std::atomic_compare_exchange_strong(&tail_, &tail, next);
+            return false;
+        }
+
+        if (std::atomic_compare_exchange_strong(&head_, &head, next)) {
+            value_type temp_data = std::move(next->data);
+            std::forward<Func>(f)(temp_data);
+            return true;
+        }
+        return false;
     }
 
     void close() {

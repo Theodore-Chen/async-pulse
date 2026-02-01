@@ -1,11 +1,12 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstdint>
-#include <functional>
 #include <future>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 struct stress_test_config {
@@ -15,7 +16,7 @@ struct stress_test_config {
     uint32_t timeout_seconds{30};
 };
 
-inline stress_test_config bounded_fulness_config() {
+inline stress_test_config bounded_fullness_config() {
     return {.producer_count = 8, .consumer_count = 8, .items_per_producer = 50000, .timeout_seconds = 60};
 }
 
@@ -24,7 +25,11 @@ inline stress_test_config push_pop_config() {
 }
 
 inline stress_test_config dequeue_stress_config() {
-    return {.producer_count = 0, .consumer_count = 32, .items_per_producer = 10000, .timeout_seconds = 30};
+    return {.producer_count = 0, .consumer_count = 64, .items_per_producer = 10000, .timeout_seconds = 30};
+}
+
+inline stress_test_config spsc_config() {
+    return {.producer_count = 1, .consumer_count = 1, .items_per_producer = 100000, .timeout_seconds = 30};
 }
 
 struct element_type {
@@ -44,7 +49,7 @@ class data_validator {
         }
     }
 
-    void record_produced(uint32_t, uint32_t) {
+    void record_produced() {
         produce_count_.fetch_add(1, std::memory_order_relaxed);
     }
 
@@ -67,6 +72,10 @@ class data_validator {
 
     size_t total_consumed() const {
         return consume_count_.load(std::memory_order_acquire);
+    }
+
+    bool validate_no_loss() const {
+        return consume_count_.load(std::memory_order_acquire) == total_items_;
     }
 
    private:
@@ -100,34 +109,36 @@ class barrier_sync {
     bool released_{false};
 };
 
+struct sync_context {
+    data_validator* validator;
+    barrier_sync* barrier;
+    std::atomic<size_t>* producers_done;
+    size_t total_producers;
+};
+
 template <typename Queue>
-void producer_worker(Queue& queue,
-                     size_t producer_id,
-                     size_t item_count,
-                     data_validator& validator,
-                     barrier_sync& sync,
-                     std::atomic<size_t>& producers_done) {
-    sync.arrive_and_wait();
+void produce_items(Queue& queue, size_t producer_id, size_t item_count, sync_context& ctx) {
+    ctx.barrier->arrive_and_wait();
     for (size_t i = 0; i < item_count; ++i) {
         element_type value{producer_id, i};
         while (!queue.enqueue(value)) {
             std::this_thread::yield();
         }
-        validator.record_produced(static_cast<uint32_t>(producer_id), static_cast<uint32_t>(i));
+        ctx.validator->record_produced();
     }
-    producers_done.fetch_add(1, std::memory_order_release);
+    ctx.producers_done->fetch_add(1, std::memory_order_release);
 }
 
 template <typename Queue>
-void consumer_worker(
-    Queue& queue, data_validator& validator, barrier_sync& sync, std::atomic<size_t>& producers_done, size_t total) {
-    sync.arrive_and_wait();
+void validate_consumed(Queue& queue, sync_context& ctx) {
+    ctx.barrier->arrive_and_wait();
     element_type value;
     while (true) {
         if (queue.dequeue(value)) {
-            validator.record_consumed(static_cast<uint32_t>(value.producer_id), static_cast<uint32_t>(value.sequence));
+            ctx.validator->record_consumed(static_cast<uint32_t>(value.producer_id),
+                                           static_cast<uint32_t>(value.sequence));
         } else {
-            if (producers_done.load(std::memory_order_acquire) >= total) {
+            if (ctx.producers_done->load(std::memory_order_acquire) >= ctx.total_producers) {
                 break;
             }
             std::this_thread::yield();
@@ -136,7 +147,7 @@ void consumer_worker(
 }
 
 template <typename Queue>
-void counting_consumer(Queue& queue, std::atomic<size_t>& count) {
+void count_consumed(Queue& queue, std::atomic<size_t>& count) {
     element_type value;
     while (queue.dequeue(value)) {
         count.fetch_add(1, std::memory_order_relaxed);
@@ -144,46 +155,40 @@ void counting_consumer(Queue& queue, std::atomic<size_t>& count) {
 }
 
 template <typename Queue>
-std::vector<std::future<void>> launch_producers(Queue& queue,
-                                                const stress_test_config& config,
-                                                data_validator& validator,
-                                                barrier_sync& sync,
-                                                std::atomic<size_t>& producers_done) {
+std::vector<std::future<void>> launch_producers(Queue& queue, const stress_test_config& config, sync_context& ctx) {
     std::vector<std::future<void>> tasks;
     tasks.reserve(config.producer_count);
     for (size_t i = 0; i < config.producer_count; ++i) {
-        tasks.emplace_back(std::async(std::launch::async, [&queue, &config, &validator, &sync, &producers_done, i]() {
-            producer_worker(queue, i, config.items_per_producer, validator, sync, producers_done);
+        tasks.emplace_back(std::async(std::launch::async, [&queue, i, &config, &ctx]() {
+            produce_items(queue, i, config.items_per_producer, ctx);
         }));
     }
     return tasks;
 }
 
 template <typename Queue>
-std::vector<std::future<void>> launch_consumers(Queue& queue,
-                                                const stress_test_config& config,
-                                                data_validator& validator,
-                                                barrier_sync& sync,
-                                                std::atomic<size_t>& producers_done) {
+std::vector<std::future<void>> launch_validating_consumers(Queue& queue,
+                                                           const stress_test_config& config,
+                                                           sync_context& ctx) {
     std::vector<std::future<void>> tasks;
     tasks.reserve(config.consumer_count);
     for (size_t i = 0; i < config.consumer_count; ++i) {
-        tasks.emplace_back(std::async(std::launch::async, [&queue, &config, &validator, &sync, &producers_done, i]() {
-            consumer_worker(queue, validator, sync, producers_done, config.producer_count);
+        tasks.emplace_back(std::async(std::launch::async, [&queue, &ctx]() {
+            validate_consumed(queue, ctx);
         }));
     }
     return tasks;
 }
 
 template <typename Queue>
-std::vector<std::future<void>> launch_consumers(Queue& queue,
-                                                const stress_test_config& config,
-                                                std::atomic<size_t>& consumed_count) {
+std::vector<std::future<void>> launch_counting_consumers(Queue& queue,
+                                                         const stress_test_config& config,
+                                                         std::atomic<size_t>& count) {
     std::vector<std::future<void>> tasks;
     tasks.reserve(config.consumer_count);
     for (size_t i = 0; i < config.consumer_count; ++i) {
-        tasks.emplace_back(std::async(std::launch::async, [&queue, &consumed_count]() {
-            counting_consumer(queue, consumed_count);
+        tasks.emplace_back(std::async(std::launch::async, [&queue, &count]() {
+            count_consumed(queue, count);
         }));
     }
     return tasks;
@@ -203,6 +208,8 @@ bool wait_for_completion(TaskContainer& tasks, uint32_t timeout_seconds) {
 template <typename Queue>
 void fill_queue_to_count(Queue& queue, size_t count) {
     for (size_t i = 0; i < count; ++i) {
-        queue.enqueue(element_type{0, i});
+        while (!queue.enqueue(element_type{0, i})) {
+            std::this_thread::yield();
+        }
     }
 }
