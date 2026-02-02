@@ -10,7 +10,8 @@
 #include "queue/lock_queue.h"
 #include "queue/ms_queue.h"
 
-constexpr size_t QUEUE_CAPACITY = 1024;
+using detail::ms_queue;
+
 constexpr size_t BULK_ITEM_COUNT = 1024 * 16;
 
 template <typename QueueType>
@@ -144,10 +145,13 @@ void bm_near_full_90_percent(benchmark::State& state) {
     fill_queue_to_percentage(*q, 0.9);
 
     for (auto _ : state) {
-        int value;
+        int value{};
         q->dequeue(value);
         q->enqueue(42);
     }
+    
+    state.SetItemsProcessed(state.iterations() * 2);
+    state.SetBytesProcessed(state.iterations() * 2 * sizeof(int));
 }
 
 template <typename QueueType>
@@ -156,20 +160,25 @@ void bm_near_full_99_percent(benchmark::State& state) {
     fill_queue_to_percentage(*q, 0.99);
 
     for (auto _ : state) {
-        int value;
+        int value{};
         q->dequeue(value);
         q->enqueue(42);
     }
+    
+    state.SetItemsProcessed(state.iterations() * 2);
+    state.SetBytesProcessed(state.iterations() * 2 * sizeof(int));
 }
 
 template <typename QueueType>
 void bm_empty_queue_try_dequeue(benchmark::State& state) {
     auto q = queue_factory<QueueType, QUEUE_CAPACITY>::create();
-    int value;
+    int value{};
 
     for (auto _ : state) {
         q->try_dequeue_with([&](int& v) {});
     }
+    
+    state.SetItemsProcessed(state.iterations());
 }
 
 BENCHMARK(bm_single_thread_round_trip_int<lock_free_bounded_queue<int>>);
@@ -215,9 +224,17 @@ BENCHMARK_TEMPLATE(bm_mpmc, ms_queue<int>)->Args({2})->Args({4})->Args({16});
 
 BENCHMARK(bm_near_full_90_percent<lock_free_bounded_queue<int>>);
 BENCHMARK(bm_near_full_90_percent<lock_bounded_queue<int>>);
+BENCHMARK(bm_near_full_90_percent<ms_queue<int>>);
+BENCHMARK(bm_near_full_90_percent<lock_queue<int>>);
+
 BENCHMARK(bm_near_full_99_percent<lock_free_bounded_queue<int>>);
 BENCHMARK(bm_near_full_99_percent<lock_bounded_queue<int>>);
+BENCHMARK(bm_near_full_99_percent<ms_queue<int>>);
+BENCHMARK(bm_near_full_99_percent<lock_queue<int>>);
+
 BENCHMARK(bm_empty_queue_try_dequeue<lock_free_bounded_queue<int>>);
 BENCHMARK(bm_empty_queue_try_dequeue<lock_bounded_queue<int>>);
+BENCHMARK(bm_empty_queue_try_dequeue<ms_queue<int>>);
+BENCHMARK(bm_empty_queue_try_dequeue<lock_queue<int>>);
 
 BENCHMARK_MAIN();

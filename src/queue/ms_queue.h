@@ -2,50 +2,56 @@
 
 #include <atomic>
 #include <optional>
-#include <memory>
-#include <mutex>
 
 #include "opt/cache_line.h"
+#include "hp/hp.h"
 
 namespace detail {
 
-// 默认的节点删除器
-template <typename Node>
-struct default_node_disposer {
-    void operator()(Node* p) const {
-        delete p;
-    }
-};
-
-}  // namespace detail
-
-// 使用 mutex + shared_ptr 的简化版 MS queue
-// 不使用 Hazard Pointer，改用更简单的同步机制
+// 使用 Hazard Pointer + CAS 的高性能 MS queue
+// 完全无锁实现，对标 libcds 架构
 template <typename T>
 class ms_queue {
    public:
     using value_type = T;
 
    private:
+    static constexpr size_t kHPCount = 2;
+    using hp_manager = detail::hp::hp;
+    using hp_guards = typename hp_manager::template scoped_guards<kHPCount>;
+
     struct node {
         value_type data;
-        std::shared_ptr<node> next;
-        mutable std::mutex next_mutex;  // 保护 next 指针的互斥锁
+        std::atomic<node*> next{nullptr};
 
-        node() : next(nullptr) {}
+        node() = default;
 
         template <typename U>
         explicit node(U&& val) : data(std::forward<U>(val)), next(nullptr) {}
     };
 
-    using node_ptr = std::shared_ptr<node>;
+    struct node_disposer {
+        void operator()(void* p) const {
+            delete static_cast<node*>(p);
+        }
+    };
 
    public:
-    ms_queue() : head_(std::make_shared<node>()), tail_(head_) {}
+    ms_queue() {
+        auto* dummy = new node();
+        head_.store(dummy, std::memory_order_relaxed);
+        tail_.store(dummy, std::memory_order_relaxed);
+        hp_manager::construct();
+    }
 
     ~ms_queue() {
         close();
         clear();
+
+        node* dummy = head_.load(std::memory_order_relaxed);
+        head_.store(nullptr, std::memory_order_relaxed);
+        tail_.store(nullptr, std::memory_order_relaxed);
+        delete dummy;
     }
 
     ms_queue(const ms_queue&) = delete;
@@ -53,79 +59,95 @@ class ms_queue {
     ms_queue(ms_queue&&) = delete;
     ms_queue& operator=(ms_queue&&) = delete;
 
-    bool empty() {
-        node_ptr head = std::atomic_load(&head_);
-        node_ptr tail = std::atomic_load(&tail_);
-        return (head == tail) && (head->next == nullptr);
+    bool empty() const {
+        hp_manager::guard guard;
+        node* h = guard.protect(head_);
+        return h->next.load(std::memory_order_acquire) == nullptr;
     }
 
-    size_t size() {
+    size_t size() const {
         size_t count = 0;
-        node_ptr head = std::atomic_load(&head_);
-        node_ptr tail = std::atomic_load(&tail_);
-        node_ptr curr = head->next;
+        hp_manager::guard guard;
+        node* head = guard.protect(head_);
+        node* tail = tail_.load(std::memory_order_relaxed);
+        node* curr = head->next.load(std::memory_order_acquire);
 
         while (curr != nullptr && head != tail) {
             count++;
             if (curr == tail) {
                 break;
             }
-            curr = curr->next;
+            curr = curr->next.load(std::memory_order_acquire);
         }
         return count;
     }
 
     bool enqueue(const value_type& val) {
-        if (is_closed_.load()) {
+        if (is_closed_.load(std::memory_order_acquire)) {
             return false;
         }
 
-        node_ptr new_node = std::make_shared<node>(val);
+        auto* new_node = new node(val);
+
+        hp_guards guards;
 
         while (true) {
-            node_ptr tail = std::atomic_load(&tail_);
-            node_ptr next;
+            node* t = guards.template protect<node>(0, tail_);
+            node* next = t->next.load(std::memory_order_acquire);
 
-            // 使用 mutex 保护 tail->next 的读取
-            {
-                std::lock_guard<std::mutex> lock(tail->next_mutex);
-                next = tail->next;
-                if (next == nullptr) {
-                    tail->next = new_node;
-                    // 尝试推进 tail
-                    std::atomic_compare_exchange_strong(&tail_, &tail, new_node);
-                    return true;
-                }
+            if (tail_.load(std::memory_order_acquire) != t) {
+                continue;
             }
 
-            // tail 落后了，帮助推进
-            std::atomic_compare_exchange_strong(&tail_, &tail, next);
+            if (next != nullptr) {
+                tail_.compare_exchange_strong(t, next, std::memory_order_release, std::memory_order_relaxed);
+                continue;
+            }
+
+            node* expected = nullptr;
+            if (t->next.compare_exchange_strong(expected, new_node, std::memory_order_release, std::memory_order_relaxed)) {
+                break;
+            }
         }
+
+        node* t = guards.get<node>(0);
+        tail_.compare_exchange_strong(t, new_node, std::memory_order_release, std::memory_order_relaxed);
+
+        return true;
     }
 
     bool enqueue(value_type&& val) {
-        if (is_closed_.load()) {
+        if (is_closed_.load(std::memory_order_acquire)) {
             return false;
         }
 
-        node_ptr new_node = std::make_shared<node>(std::move(val));
+        auto* new_node = new node(std::move(val));
+
+        hp_guards guards;
 
         while (true) {
-            node_ptr tail = std::atomic_load(&tail_);
-            node_ptr next;
+            node* t = guards.template protect<node>(0, tail_);
+            node* next = t->next.load(std::memory_order_acquire);
 
-            {
-                std::lock_guard<std::mutex> lock(tail->next_mutex);
-                next = tail->next;
-                if (next == nullptr) {
-                    tail->next = new_node;
-                    std::atomic_compare_exchange_strong(&tail_, &tail, new_node);
-                    return true;
-                }
+            if (tail_.load(std::memory_order_acquire) != t) {
+                continue;
             }
 
-            std::atomic_compare_exchange_strong(&tail_, &tail, next);
+            if (next != nullptr) {
+                tail_.compare_exchange_strong(t, next, std::memory_order_release, std::memory_order_relaxed);
+                continue;
+            }
+
+            node* expected = nullptr;
+            if (t->next.compare_exchange_strong(expected, new_node, std::memory_order_release, std::memory_order_relaxed)) {
+                break;
+            }
         }
+
+        node* t = guards.get<node>(0);
+        tail_.compare_exchange_strong(t, new_node, std::memory_order_release, std::memory_order_relaxed);
+
+        return true;
     }
 
     template <typename... Args>
@@ -135,29 +157,38 @@ class ms_queue {
 
     template <typename Func>
     bool enqueue_with(Func&& f) {
-        if (is_closed_.load()) {
+        if (is_closed_.load(std::memory_order_acquire)) {
             return false;
         }
 
-        node_ptr new_node = std::make_shared<node>();
+        auto* new_node = new node();
         f(new_node->data);
 
-        while (true) {
-            node_ptr tail = std::atomic_load(&tail_);
-            node_ptr next;
+        hp_guards guards;
 
-            {
-                std::lock_guard<std::mutex> lock(tail->next_mutex);
-                next = tail->next;
-                if (next == nullptr) {
-                    tail->next = new_node;
-                    std::atomic_compare_exchange_strong(&tail_, &tail, new_node);
-                    return true;
-                }
+        while (true) {
+            node* t = guards.template protect<node>(0, tail_);
+            node* next = t->next.load(std::memory_order_acquire);
+
+            if (tail_.load(std::memory_order_acquire) != t) {
+                continue;
             }
 
-            std::atomic_compare_exchange_strong(&tail_, &tail, next);
+            if (next != nullptr) {
+                tail_.compare_exchange_strong(t, next, std::memory_order_release, std::memory_order_relaxed);
+                continue;
+            }
+
+            node* expected = nullptr;
+            if (t->next.compare_exchange_strong(expected, new_node, std::memory_order_release, std::memory_order_relaxed)) {
+                break;
+            }
         }
+
+        node* t = guards.get<node>(0);
+        tail_.compare_exchange_strong(t, new_node, std::memory_order_release, std::memory_order_relaxed);
+
+        return true;
     }
 
     template <typename Func>
@@ -177,33 +208,33 @@ class ms_queue {
 
     template <typename Func>
     bool dequeue_with(Func&& f) {
+        hp_guards guards;
+
         while (true) {
-            node_ptr head = std::atomic_load(&head_);
-            node_ptr tail = std::atomic_load(&tail_);
+            node* h = guards.template protect<node>(0, head_);
+            node* next = guards.template protect<node>(1, h->next);
 
-            // 读取 head->next
-            node_ptr next;
-            {
-                std::lock_guard<std::mutex> lock(head->next_mutex);
-                next = head->next;
-            }
-
-            if (head == tail) {
-                if (next == nullptr) {
-                    if (is_closed_.load()) {
-                        return false;
-                    }
-                    continue;
-                }
-                // 帮助推进 tail
-                std::atomic_compare_exchange_strong(&tail_, &tail, next);
+            if (head_.load(std::memory_order_acquire) != h) {
                 continue;
             }
 
-            // 尝试推进 head
-            if (std::atomic_compare_exchange_strong(&head_, &head, next)) {
+            if (next == nullptr) {
+                if (is_closed_.load(std::memory_order_acquire)) {
+                    return false;
+                }
+                continue;
+            }
+
+            node* t = tail_.load(std::memory_order_acquire);
+            if (h == t) {
+                tail_.compare_exchange_strong(t, next, std::memory_order_release, std::memory_order_relaxed);
+                continue;
+            }
+
+            if (head_.compare_exchange_strong(h, next, std::memory_order_acquire, std::memory_order_relaxed)) {
                 value_type temp_data = std::move(next->data);
                 std::forward<Func>(f)(temp_data);
+                hp_manager::template retire<node_disposer>(h);
                 return true;
             }
         }
@@ -211,46 +242,72 @@ class ms_queue {
 
     template <typename Func>
     bool try_dequeue_with(Func&& f) {
-        node_ptr head = std::atomic_load(&head_);
-        node_ptr tail = std::atomic_load(&tail_);
+        hp_manager::guard guard;
 
-        node_ptr next;
-        {
-            std::lock_guard<std::mutex> lock(head->next_mutex);
-            next = head->next;
-        }
+        node* h = guard.template protect<node>(head_);
+        node* next = h->next.load(std::memory_order_acquire);
 
-        if (head == tail) {
-            if (next == nullptr) {
-                return false;
-            }
-            std::atomic_compare_exchange_strong(&tail_, &tail, next);
+        if (next == nullptr) {
             return false;
         }
 
-        if (std::atomic_compare_exchange_strong(&head_, &head, next)) {
+        node* t = tail_.load(std::memory_order_acquire);
+        if (h == t && next != nullptr) {
+            tail_.compare_exchange_strong(t, next, std::memory_order_release, std::memory_order_relaxed);
+            return false;
+        }
+
+        if (head_.compare_exchange_strong(h, next, std::memory_order_acquire, std::memory_order_relaxed)) {
             value_type temp_data = std::move(next->data);
             std::forward<Func>(f)(temp_data);
+            hp_manager::template retire<node_disposer>(h);
             return true;
         }
         return false;
     }
 
     void close() {
-        is_closed_.store(true);
+        is_closed_.store(true, std::memory_order_release);
     }
 
-    bool is_closed() {
-        return is_closed_.load();
+    bool is_closed() const {
+        return is_closed_.load(std::memory_order_relaxed);
     }
 
     void clear() {
-        head_ = std::make_shared<node>();
-        tail_ = head_;
+        value_type dummy;
+        while (dequeue(dummy)) {}
+
+        auto* new_dummy = new node();
+        node* old_head = head_.load(std::memory_order_relaxed);
+        node* old_tail = tail_.load(std::memory_order_relaxed);
+
+        head_.store(new_dummy, std::memory_order_release);
+        tail_.store(new_dummy, std::memory_order_release);
+
+        hp_manager::template retire<node_disposer>(old_head);
+    }
+
+    static void initialize_hp() {
+        hp_manager::construct();
+    }
+
+    static void shutdown_hp() {
+        hp_manager::destruct();
+    }
+
+    static void attach_thread() {
+        hp_manager::attach_thread();
+    }
+
+    static void detach_thread() {
+        hp_manager::detach_thread();
     }
 
    private:
-    node_ptr head_;  // 使用 shared_ptr，通过 atomic_xxx 函数进行原子操作
-    node_ptr tail_;
+    std::atomic<node*> head_;
+    std::atomic<node*> tail_;
     std::atomic<bool> is_closed_{false};
 };
+
+}  // namespace detail
