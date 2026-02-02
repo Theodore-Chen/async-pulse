@@ -9,8 +9,6 @@
 #include "queue/ms_queue.h"
 #include "queue_factory.h"
 
-using detail::ms_queue;
-
 template <typename T>
 class queue_ut : public ::testing::Test {
    protected:

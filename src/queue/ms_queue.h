@@ -6,8 +6,6 @@
 #include "opt/cache_line.h"
 #include "hp/hp.h"
 
-namespace detail {
-
 // 使用 Hazard Pointer + CAS 的高性能 MS queue
 // 完全无锁实现，对标 libcds 架构
 template <typename T>
@@ -309,5 +307,3 @@ class ms_queue {
     std::atomic<node*> tail_;
     std::atomic<bool> is_closed_{false};
 };
-
-}  // namespace detail

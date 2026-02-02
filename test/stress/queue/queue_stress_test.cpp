@@ -9,8 +9,6 @@
 #include "queue_factory.h"
 #include "queue_stress_helpers.h"
 
-using detail::ms_queue;
-
 constexpr size_t QUEUE_CAPACITY = 2048;
 
 template <typename T>

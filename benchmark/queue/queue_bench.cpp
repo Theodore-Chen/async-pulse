@@ -10,8 +10,6 @@
 #include "queue/lock_queue.h"
 #include "queue/ms_queue.h"
 
-using detail::ms_queue;
-
 constexpr size_t BULK_ITEM_COUNT = 1024 * 16;
 
 template <typename QueueType>
