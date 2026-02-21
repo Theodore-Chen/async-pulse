@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "queue/faa_bounded_queue.h"
 #include "queue/lock_bounded_queue.h"
 #include "queue/lock_free_bounded_queue.h"
 #include "queue_factory.h"
@@ -20,7 +21,8 @@ class bounded_queue_ut : public ::testing::Test {
     size_t capacity_{0};
 };
 
-using bounded_queue_impls = ::testing::Types<lock_bounded_queue<uint32_t>, lock_free_bounded_queue<uint32_t>>;
+using bounded_queue_impls = ::testing::Types<lock_bounded_queue<uint32_t>, lock_free_bounded_queue<uint32_t>,
+                                            faa_bounded_queue<uint32_t>>;
 
 TYPED_TEST_SUITE(bounded_queue_ut, bounded_queue_impls);
 

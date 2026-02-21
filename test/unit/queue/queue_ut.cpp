@@ -3,6 +3,7 @@
 #include <future>
 #include <vector>
 
+#include "queue/faa_bounded_queue.h"
 #include "queue/lock_bounded_queue.h"
 #include "queue/lock_free_bounded_queue.h"
 #include "queue/lock_queue.h"
@@ -25,8 +26,11 @@ class queue_ut : public ::testing::Test {
     size_t capacity_{0};
 };
 
-using queue_impls = ::testing::Types<lock_queue<uint32_t>, lock_bounded_queue<uint32_t>,
-                                     lock_free_bounded_queue<uint32_t>, ms_queue<uint32_t>>;
+using queue_impls = ::testing::Types<lock_queue<uint32_t>,
+                                     lock_bounded_queue<uint32_t>,
+                                     lock_free_bounded_queue<uint32_t>,
+                                     ms_queue<uint32_t>,
+                                     faa_bounded_queue<uint32_t>>;
 
 TYPED_TEST_SUITE(queue_ut, queue_impls);
 
@@ -348,7 +352,9 @@ TYPED_TEST(queue_ut, enqueue_dequeue_interleaved) {
 
 // ========== Concurrent Tests ==========
 template <typename QueueType>
-std::vector<std::future<void>> create_producer_tasks(QueueType& queue, std::atomic<size_t>& count, size_t item_num,
+std::vector<std::future<void>> create_producer_tasks(QueueType& queue,
+                                                     std::atomic<size_t>& count,
+                                                     size_t item_num,
                                                      size_t producer_num) {
     using element_type = typename QueueType::value_type;
     std::vector<std::future<void>> tasks;
@@ -368,7 +374,9 @@ std::vector<std::future<void>> create_producer_tasks(QueueType& queue, std::atom
 }
 
 template <typename QueueType>
-std::vector<std::future<void>> create_consumer_tasks(QueueType& queue, std::atomic<size_t>& count, size_t item_num,
+std::vector<std::future<void>> create_consumer_tasks(QueueType& queue,
+                                                     std::atomic<size_t>& count,
+                                                     size_t item_num,
                                                      size_t consumer_num) {
     using element_type = typename QueueType::value_type;
     std::vector<std::future<void>> tasks;

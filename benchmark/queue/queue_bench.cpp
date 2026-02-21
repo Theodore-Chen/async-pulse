@@ -1,14 +1,15 @@
 #include <benchmark/benchmark.h>
 
+#include "queue/faa_bounded_queue.h"
+#include "queue/lock_bounded_queue.h"
+#include "queue/lock_free_bounded_queue.h"
+#include "queue/lock_queue.h"
+#include "queue/ms_queue.h"
 #include "queue_factory.h"
 #include "queue_helpers.h"
 #include "test_types.h"
 #include "thread_helpers.h"
 #include "thread_sync.h"
-#include "queue/lock_bounded_queue.h"
-#include "queue/lock_free_bounded_queue.h"
-#include "queue/lock_queue.h"
-#include "queue/ms_queue.h"
 
 constexpr size_t BULK_ITEM_COUNT = 1024 * 16;
 
@@ -86,9 +87,9 @@ void bm_capacity(benchmark::State& state) {
 
 template <typename Queue>
 void run_producer_consumer_benchmark(benchmark::State& state,
-                                      size_t producer_num,
-                                      size_t consumer_num,
-                                      size_t items_per_producer) {
+                                     size_t producer_num,
+                                     size_t consumer_num,
+                                     size_t items_per_producer) {
     for (auto _ : state) {
         auto q = queue_factory<Queue, QUEUE_CAPACITY>::create();
         start_sync sync;
@@ -147,7 +148,7 @@ void bm_near_full_90_percent(benchmark::State& state) {
         q->dequeue(value);
         q->enqueue(42);
     }
-    
+
     state.SetItemsProcessed(state.iterations() * 2);
     state.SetBytesProcessed(state.iterations() * 2 * sizeof(int));
 }
@@ -162,7 +163,7 @@ void bm_near_full_99_percent(benchmark::State& state) {
         q->dequeue(value);
         q->enqueue(42);
     }
-    
+
     state.SetItemsProcessed(state.iterations() * 2);
     state.SetBytesProcessed(state.iterations() * 2 * sizeof(int));
 }
@@ -175,64 +176,112 @@ void bm_empty_queue_try_dequeue(benchmark::State& state) {
     for (auto _ : state) {
         q->try_dequeue_with([&](int& v) {});
     }
-    
+
     state.SetItemsProcessed(state.iterations());
 }
 
+// ============================================================================
+// Single Thread Round Trip
+// ============================================================================
 BENCHMARK(bm_single_thread_round_trip_int<lock_free_bounded_queue<int>>);
+BENCHMARK(bm_single_thread_round_trip_int<faa_bounded_queue<int>>);
 BENCHMARK(bm_single_thread_round_trip_int<lock_bounded_queue<int>>);
 BENCHMARK(bm_single_thread_round_trip_int<lock_queue<int>>);
 BENCHMARK(bm_single_thread_round_trip_int<ms_queue<int>>);
 
+// ============================================================================
+// Round Trip - Small Object
+// ============================================================================
 BENCHMARK(bm_round_trip_small_object<lock_free_bounded_queue<small_object>>);
+BENCHMARK(bm_round_trip_small_object<faa_bounded_queue<small_object>>);
 BENCHMARK(bm_round_trip_small_object<lock_bounded_queue<small_object>>);
 BENCHMARK(bm_round_trip_small_object<lock_queue<small_object>>);
 BENCHMARK(bm_round_trip_small_object<ms_queue<small_object>>);
+
+// ============================================================================
+// Round Trip - Medium Object
+// ============================================================================
 BENCHMARK(bm_round_trip_medium_object<lock_free_bounded_queue<medium_object>>);
+BENCHMARK(bm_round_trip_medium_object<faa_bounded_queue<medium_object>>);
 BENCHMARK(bm_round_trip_medium_object<lock_bounded_queue<medium_object>>);
 BENCHMARK(bm_round_trip_medium_object<lock_queue<medium_object>>);
 BENCHMARK(bm_round_trip_medium_object<ms_queue<medium_object>>);
+
+// ============================================================================
+// Round Trip - Large Object
+// ============================================================================
 BENCHMARK(bm_round_trip_large_object<lock_free_bounded_queue<large_object>>);
+BENCHMARK(bm_round_trip_large_object<faa_bounded_queue<large_object>>);
 BENCHMARK(bm_round_trip_large_object<lock_bounded_queue<large_object>>);
 BENCHMARK(bm_round_trip_large_object<lock_queue<large_object>>);
 BENCHMARK(bm_round_trip_large_object<ms_queue<large_object>>);
 
+// ============================================================================
+// Capacity Scaling
+// ============================================================================
 BENCHMARK_TEMPLATE(bm_capacity, lock_free_bounded_queue<int>)->Range(64, 4096);
+BENCHMARK_TEMPLATE(bm_capacity, faa_bounded_queue<int>)->Range(64, 4096);
 BENCHMARK_TEMPLATE(bm_capacity, lock_bounded_queue<int>)->Range(64, 4096);
 
+// ============================================================================
+// SPSC (Single Producer Single Consumer)
+// ============================================================================
 BENCHMARK(bm_spsc<lock_free_bounded_queue<int>>);
+BENCHMARK(bm_spsc<faa_bounded_queue<int>>);
 BENCHMARK(bm_spsc<lock_bounded_queue<int>>);
 BENCHMARK(bm_spsc<lock_queue<int>>);
 BENCHMARK(bm_spsc<ms_queue<int>>);
 
+// ============================================================================
+// MPSC (Multiple Producers Single Consumer)
+// ============================================================================
 BENCHMARK_TEMPLATE(bm_mpsc, lock_free_bounded_queue<int>)->Args({2})->Args({4})->Args({16});
+BENCHMARK_TEMPLATE(bm_mpsc, faa_bounded_queue<int>)->Args({2})->Args({4})->Args({16});
 BENCHMARK_TEMPLATE(bm_mpsc, lock_bounded_queue<int>)->Args({2})->Args({4})->Args({16});
 BENCHMARK_TEMPLATE(bm_mpsc, lock_queue<int>)->Args({2})->Args({4})->Args({16});
 BENCHMARK_TEMPLATE(bm_mpsc, ms_queue<int>)->Args({2})->Args({4})->Args({16});
 
+// ============================================================================
+// SPMC (Single Producer Multiple Consumers)
+// ============================================================================
 BENCHMARK_TEMPLATE(bm_spmc, lock_free_bounded_queue<int>)->Args({2})->Args({4})->Args({16});
+BENCHMARK_TEMPLATE(bm_spmc, faa_bounded_queue<int>)->Args({2})->Args({4})->Args({16});
 BENCHMARK_TEMPLATE(bm_spmc, lock_bounded_queue<int>)->Args({2})->Args({4})->Args({16});
 BENCHMARK_TEMPLATE(bm_spmc, lock_queue<int>)->Args({2})->Args({4})->Args({16});
 BENCHMARK_TEMPLATE(bm_spmc, ms_queue<int>)->Args({2})->Args({4})->Args({16});
 
+// ============================================================================
+// MPMC (Multiple Producers Multiple Consumers)
+// ============================================================================
 BENCHMARK_TEMPLATE(bm_mpmc, lock_free_bounded_queue<int>)->Args({2})->Args({4})->Args({16});
+BENCHMARK_TEMPLATE(bm_mpmc, faa_bounded_queue<int>)->Args({2})->Args({4})->Args({16});
 BENCHMARK_TEMPLATE(bm_mpmc, lock_bounded_queue<int>)->Args({2})->Args({4})->Args({16});
 BENCHMARK_TEMPLATE(bm_mpmc, lock_queue<int>)->Args({2})->Args({4})->Args({16});
 BENCHMARK_TEMPLATE(bm_mpmc, ms_queue<int>)->Args({2})->Args({4})->Args({16});
 
+// ============================================================================
+// Near Full Queue - 90%
+// ============================================================================
 BENCHMARK(bm_near_full_90_percent<lock_free_bounded_queue<int>>);
+BENCHMARK(bm_near_full_90_percent<faa_bounded_queue<int>>);
 BENCHMARK(bm_near_full_90_percent<lock_bounded_queue<int>>);
 BENCHMARK(bm_near_full_90_percent<ms_queue<int>>);
 BENCHMARK(bm_near_full_90_percent<lock_queue<int>>);
 
+// ============================================================================
+// Near Full Queue - 99%
+// ============================================================================
 BENCHMARK(bm_near_full_99_percent<lock_free_bounded_queue<int>>);
+BENCHMARK(bm_near_full_99_percent<faa_bounded_queue<int>>);
 BENCHMARK(bm_near_full_99_percent<lock_bounded_queue<int>>);
 BENCHMARK(bm_near_full_99_percent<ms_queue<int>>);
 BENCHMARK(bm_near_full_99_percent<lock_queue<int>>);
 
+// ============================================================================
+// Empty Queue Try Dequeue
+// ============================================================================
 BENCHMARK(bm_empty_queue_try_dequeue<lock_free_bounded_queue<int>>);
+BENCHMARK(bm_empty_queue_try_dequeue<faa_bounded_queue<int>>);
 BENCHMARK(bm_empty_queue_try_dequeue<lock_bounded_queue<int>>);
 BENCHMARK(bm_empty_queue_try_dequeue<ms_queue<int>>);
 BENCHMARK(bm_empty_queue_try_dequeue<lock_queue<int>>);
-
-BENCHMARK_MAIN();
