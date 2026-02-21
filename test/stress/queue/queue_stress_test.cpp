@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "queue/faa_bounded_queue.h"
+#include "queue/ff_bounded_queue.h"
 #include "queue/lock_bounded_queue.h"
 #include "queue/lock_free_bounded_queue.h"
 #include "queue/lock_queue.h"
@@ -26,7 +27,8 @@ using queue_impls = ::testing::Types<lock_queue<element_type>,
                                      lock_bounded_queue<element_type>,
                                      lock_free_bounded_queue<element_type>,
                                      ms_queue<element_type>,
-                                     faa_bounded_queue<element_type>>;
+                                     faa_bounded_queue<element_type>,
+                                     ff_bounded_queue<element_type>>;
 
 TYPED_TEST_SUITE(queue_stress, queue_impls);
 
@@ -46,9 +48,7 @@ void run_mpmc_test(Queue& queue, const stress_test_config& config, data_validato
     ASSERT_TRUE(wait_for_completion(consumers, config.timeout_seconds));
 }
 
-void expect_mpmc_data_integrity(const data_validator& validator,
-                                size_t producer_count,
-                                size_t items_per_producer) {
+void expect_mpmc_data_integrity(const data_validator& validator, size_t producer_count, size_t items_per_producer) {
     size_t expected_total = producer_count * items_per_producer;
     EXPECT_EQ(validator.total_produced(), expected_total);
     EXPECT_EQ(validator.total_consumed(), expected_total);

@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "queue/faa_bounded_queue.h"
+#include "queue/ff_bounded_queue.h"
 #include "queue/lock_bounded_queue.h"
 #include "queue/lock_free_bounded_queue.h"
 #include "queue/lock_queue.h"
@@ -30,7 +31,8 @@ using queue_impls = ::testing::Types<lock_queue<uint32_t>,
                                      lock_bounded_queue<uint32_t>,
                                      lock_free_bounded_queue<uint32_t>,
                                      ms_queue<uint32_t>,
-                                     faa_bounded_queue<uint32_t>>;
+                                     faa_bounded_queue<uint32_t>,
+                                     ff_bounded_queue<uint32_t>>;
 
 TYPED_TEST_SUITE(queue_ut, queue_impls);
 
